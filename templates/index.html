@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LIGHTHOUSE</title>
+
+  {#
+    In production:  vite_css() injects <link> tags for the hashed CSS bundle
+                    resolved from static/dist/.vite/manifest.json.
+    In development: Vite injects CSS via the JS module — no <link> needed.
+  #}
+  {{ vite_css('js/main.js') | safe }}
+
+  {#
+    In development (VITE_DEV_SERVER set): load from Vite's HMR dev server.
+    In production: load the hashed, minified bundle from static/dist/.
+  #}
+  {% if vite_dev %}
+    <script type="module" src="{{ vite_dev }}/js/main.js"></script>
+  {% else %}
+    <script type="module" src="{{ vite_asset('js/main.js') }}"></script>
+  {% endif %}
+</head>
+<body>
+
+<!-- ── Top bar ─────────────────────────────────────────────────────────── -->
+<header class="topbar">
+  <div class="topbar-logo">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M12 2L8 6v4H6v2H4v8h2v2h2v-2h8v2h2v-2h2V12h-2V10h-2V6l-4-4z"/>
+      <rect x="10" y="14" width="4" height="6"/>
+      <circle cx="12" cy="18" r="1"/>
+      <path d="M8 10h8M6 12h12"/>
+    </svg>
+    LIGHTHOUSE
+  </div>
+  <div class="topbar-divider"></div>
+  <span class="topbar-meta">last sync: <span id="last-sync">—</span></span>
+  <div class="user-info">
+    <img id="user-avatar" src="" alt="Avatar" style="width: 24px; height: 24px; border-radius: 50%; margin-right: 8px;">
+    <span id="user-name"></span>
+    <span id="gitlab-status" class="gitlab-status" title="GitLab token status"></span>
+  </div>
+  <button class="btn" id="update-token-btn" type="button" title="Update GitLab Token">🔑</button>
+  <button class="btn" id="admin-btn" type="button" title="Admin Panel" style="display: none;">👑</button>
+  <button class="btn" id="logout-btn" type="button">Logout</button>
+  <button class="btn" id="sync-btn" type="button">
+    <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+      <path d="M1 4v6h6M23 20v-6h-6"/>
+      <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+    </svg>
+    Sync
+  </button>
+</header>
+
+<!-- ── Summary bar ─────────────────────────────────────────────────────── -->
+<div class="summary-bar" aria-label="Pipeline status summary">
+  <div class="stat-chip">
+    <span class="dot status-unknown"></span>
+    <span class="count" id="stat-projects">—</span> projects
+  </div>
+  <div class="stat-chip">
+    <span class="dot status-success"></span>
+    <span class="count" id="stat-success">—</span> passed
+  </div>
+  <div class="stat-chip">
+    <span class="dot status-failed"></span>
+    <span class="count" id="stat-failed">—</span> failed
+  </div>
+  <div class="stat-chip">
+    <span class="dot status-running"></span>
+    <span class="count" id="stat-running">—</span> running
+  </div>
+  <div class="stat-chip">
+    <span class="dot status-pending"></span>
+    <span class="count" id="stat-pending">—</span> pending
+  </div>
+  <div class="stat-chip">
+    <span class="dot status-canceled"></span>
+    <span class="count" id="stat-canceled">—</span> canceled
+  </div>
+</div>
+
+<!-- ── Main layout ──────────────────────────────────────────────────────── -->
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" aria-label="Groups and projects">
+    <div class="sidebar-section">
+      <h3>Groups</h3>
+      <div class="sidebar-search">
+        <input
+          id="group-search-input"
+          type="search"
+          placeholder="Search groups…"
+          aria-label="Search groups"
+        />
+      </div>
+      <ul id="group-list" role="listbox" aria-label="Groups"></ul>
+      <button id="add-group-btn" class="btn">Add Group</button>
+    </div>
+    <div class="sidebar-section">
+      <h3>Projects</h3>
+      <div class="sidebar-search">
+        <input
+          id="search-input"
+          type="search"
+          placeholder="Filter projects…"
+          aria-label="Filter projects"
+        />
+      </div>
+      <ul id="project-list" role="listbox" aria-label="Projects"></ul>
+    </div>
+  </aside>
+
+  <!-- Add Group Modal -->
+  <div id="add-group-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <h3>Add GitLab Group</h3>
+      <form id="add-group-form">
+        <div class="form-group">
+          <label for="group-input">Group ID or Full Path:</label>
+          <input type="text" id="group-input" placeholder="e.g. 123 or mygroup/subgroup" required>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="cancel-add-group" class="btn-secondary">Cancel</button>
+          <button type="submit" class="btn">Add Group</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Update Token Modal -->
+  <div id="update-token-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <h3>Update GitLab Token</h3>
+      <p>Enter your GitLab Personal Access Token to access private groups and projects.</p>
+      <form id="update-token-form">
+        <div class="form-group">
+          <label for="token-input">GitLab Token:</label>
+          <input type="password" id="token-input" placeholder="glpat-..." required>
+          <small class="form-help">Token must have 'read_api' scope. Get one from GitLab → User Settings → Access Tokens.</small>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="cancel-update-token" class="btn-secondary">Cancel</button>
+          <button type="submit" class="btn">Update Token</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Admin Modal -->
+  <div id="admin-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <h3>Admin Panel - User Management</h3>
+      <div id="admin-users-list">
+        <!-- Users will be populated here -->
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="cancel-admin">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main panel — populated entirely by render.js -->
+  <main class="main" id="main-panel" aria-live="polite"></main>
+
+</div>
+
+</body>
+</html>

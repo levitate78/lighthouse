@@ -1,0 +1,227 @@
+/* ── Google Fonts ──────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+/* ── Design tokens ─────────────────────────────────────────────────────── */
+:root {
+  --bg:          #0a0c0f;
+  --surface:     #111318;
+  --surface2:    #191c23;
+  --border:      #232730;
+  --border2:     #2e3340;
+  --text:        #e2e6f0;
+  --text-muted:  #6b7280;
+  --text-dim:    #9ca3af;
+  --accent:      #e8673a;
+  --accent-glow: rgba(232, 103, 58, 0.18);
+
+  --success:     #34c98a;
+  --success-bg:  rgba(52, 201, 138, 0.12);
+  --fail:        #f05252;
+  --fail-bg:     rgba(240, 82, 82, 0.12);
+  --running:     #f59e0b;
+  --running-bg:  rgba(245, 158, 11, 0.12);
+  --pending:     #818cf8;
+  --pending-bg:  rgba(129, 140, 248, 0.12);
+  --canceled:    #6b7280;
+  --canceled-bg: rgba(107, 114, 128, 0.12);
+
+  --mono: 'IBM Plex Mono', monospace;
+  --sans: 'IBM Plex Sans', sans-serif;
+  --radius: 6px;
+  --transition: 180ms ease;
+}
+
+/* ── Reset ─────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html { font-size: 14px; }
+
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.55;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* ── Login header with branding ─────────────────────────────────────── */
+.login-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.lighthouse-icon {
+  margin-bottom: 1rem;
+  color: var(--accent);
+}
+
+.login-header h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.02em;
+}
+
+.slogan {
+  font-size: 1rem;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin: 0;
+}
+
+/* ── Login-specific styles ─────────────────────────────────────────────── */
+.login-tabs {
+  display: flex;
+  margin-bottom: 1.5rem;
+  background: var(--surface2);
+  border-radius: var(--radius);
+  overflow: hidden;
+  text-align: center;
+}
+
+.tab {
+  flex: 1;
+  padding: 12px;
+  background: var(--surface2);
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: var(--sans);
+  color: var(--text-muted);
+  transition: var(--transition);
+}
+
+.tab.active {
+  background: var(--accent);
+  color: var(--text);
+}
+
+.tab:hover:not(.active) {
+  background: var(--border);
+  color: var(--text);
+}
+
+.tab-content {
+  display: none;
+  text-align: center;
+  margin-top: 1.5rem;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* ── Common form styles ────────────────────────────────────────────────── */
+.form-group {
+  margin-bottom: 1rem;
+  text-align: left;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  box-sizing: border-box;
+  outline: none;
+  transition: var(--transition);
+}
+
+.form-group input:focus {
+  border-color: var(--accent);
+}
+
+.form-group input::placeholder {
+  color: var(--text-muted);
+}
+
+.error {
+  color: var(--fail);
+  font-size: 12px;
+  margin-top: 0.5rem;
+}
+
+/* ── Button styles ─────────────────────────────────────────────────────── */
+.login-button,
+.signup-button,
+.btn {
+  background: var(--accent);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  padding: 12px 24px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-family: var(--sans);
+  cursor: pointer;
+  width: 100%;
+  margin-top: 1rem;
+  transition: var(--transition);
+}
+
+.login-button:hover,
+.signup-button:hover,
+.btn:hover {
+  background: transparent;
+  color: var(--accent);
+}
+
+/* ── Typography ────────────────────────────────────────────────────────── */
+h1 {
+  color: var(--text);
+  margin-bottom: 0.5rem;
+  text-align: center;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+p {
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+  text-align: center;
+  font-size: 14px;
+}
+
+.link {
+  color: var(--accent);
+  text-decoration: none;
+  transition: var(--transition);
+}
+
+.link:hover {
+  color: var(--text);
+}
+
+/* ── Flash messages ─────────────────────────────────────────────────────── */
+.flash-messages {
+  margin-bottom: 1.5rem;
+}
+
+.flash-message {
+  background: var(--fail-bg);
+  color: var(--fail);
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--fail);
+  font-size: 14px;
+}

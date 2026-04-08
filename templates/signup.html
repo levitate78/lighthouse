@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign Up - LIGHTHOUSE</title>
+
+  {#
+    In production:  vite_css() injects <link> tags for the hashed CSS bundle
+                    resolved from static/dist/.vite/manifest.json.
+    In development: Vite injects CSS via the JS module — no <link> needed.
+  #}
+  {{ vite_css('js/auth.js') | safe }}
+
+  {#
+    In development (VITE_DEV_SERVER set): load from Vite's HMR dev server.
+    In production: load the hashed, minified bundle from static/dist/.
+  #}
+  {% if vite_dev %}
+    <script type="module" src="{{ vite_dev }}/js/auth.js"></script>
+  {% else %}
+    <script type="module" src="{{ vite_asset('js/auth.js') }}"></script>
+  {% endif %}
+</head>
+<body>
+  <div class="signup-container">
+    <div class="login-header">
+      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="lighthouse-icon">
+        <path d="M12 2L8 6v4H6v2H4v8h2v2h2v-2h8v2h2v-2h2V12h-2V10h-2V6l-4-4z"/>
+        <rect x="10" y="14" width="4" height="6"/>
+        <circle cx="12" cy="18" r="1"/>
+        <path d="M8 10h8M6 12h12"/>
+      </svg>
+      <h1>LIGHTHOUSE</h1>
+      <p class="slogan">See beyond the horizon.</p>
+    </div>
+    
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash-messages">
+          {% for message in messages %}
+            <div class="flash-message">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    
+    <form method="POST">
+      {{ form.hidden_tag() }}
+      <div class="form-group">
+        {{ form.username.label }}
+        {{ form.username }}
+        {% if form.username.errors %}
+          <div class="error">{{ form.username.errors[0] }}</div>
+        {% endif %}
+      </div>
+      <div class="form-group">
+        {{ form.name.label }}
+        {{ form.name }}
+        {% if form.name.errors %}
+          <div class="error">{{ form.name.errors[0] }}</div>
+        {% endif %}
+      </div>
+      <div class="form-group">
+        {{ form.email.label }}
+        {{ form.email }}
+        {% if form.email.errors %}
+          <div class="error">{{ form.email.errors[0] }}</div>
+        {% endif %}
+      </div>
+      <div class="form-group">
+        {{ form.password.label }}
+        {{ form.password }}
+        {% if form.password.errors %}
+          <div class="error">{{ form.password.errors[0] }}</div>
+        {% endif %}
+      </div>
+      <div class="form-group">
+        {{ form.confirm_password.label }}
+        {{ form.confirm_password }}
+        {% if form.confirm_password.errors %}
+          <div class="error">{{ form.confirm_password.errors[0] }}</div>
+        {% endif %}
+      </div>
+      <div class="form-group">
+        {{ form.gitlab_token.label }}
+        {{ form.gitlab_token }}
+        <small class="form-help">Optional: GitLab PAT must have <code>read_api</code> scope.</small>
+        {% if form.gitlab_token.errors %}
+          <div class="error">{{ form.gitlab_token.errors[0] }}</div>
+        {% endif %}
+      </div>
+      {{ form.submit(class="signup-button") }}
+    </form>
+    
+    <p style="margin-top: 1rem;">Already have an account? <a href="/login/local" class="link">Sign in</a></p>
+  </div>
+</body>
+</html>
