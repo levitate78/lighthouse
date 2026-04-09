@@ -16,19 +16,19 @@ class Config:
 
     # Validate required environment variables
     if not SECRET_KEY:
-        raise ValueError("SECRET_KEY environment variable is required and cannot be empty")
+        raise ValueError(
+            "SECRET_KEY environment variable is required and cannot be empty"
+        )
 
     # Database — SQLite by default, swap for PostgreSQL in production:
     #   postgresql+psycopg2://user:password@host/dbname
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        "DATABASE_URL", "sqlite:///pipeline_monitor.db"
-    )
+    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///pipeline_monitor.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # GitLab
     GITLAB_URL = os.getenv("GITLAB_URL", "https://gitlab.com")
-    GITLAB_TOKEN = os.getenv("GITLAB_TOKEN", "")          # Personal / project access token
-    GITLAB_GROUP_ID = os.getenv("GITLAB_GROUP_ID", "")    # Group ID or URL-encoded path
+    GITLAB_TOKEN = os.getenv("GITLAB_TOKEN", "")  # Personal / project access token
+    GITLAB_GROUP_ID = os.getenv("GITLAB_GROUP_ID", "")  # Group ID or URL-encoded path
 
     # Sync interval in seconds (default: 60)
     SYNC_INTERVAL_SECONDS = int(os.getenv("SYNC_INTERVAL_SECONDS", "60"))
@@ -45,9 +45,11 @@ class Config:
     ENABLE_GITLAB_LOGIN = os.getenv("ENABLE_GITLAB_LOGIN", "true").lower() == "true"
 
     # Session security
-    SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true"
+    SESSION_COOKIE_SECURE = (
+        os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true"
+    )
     SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SAMESITE = "Lax"
     PERMANENT_SESSION_LIFETIME = 3600  # 1 hour
 
     # APScheduler

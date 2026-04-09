@@ -12,7 +12,9 @@ class User(UserMixin, db.Model):
     __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
-    gitlab_id = db.Column(db.Integer, unique=True, nullable=True)  # Only for GitLab users
+    gitlab_id = db.Column(
+        db.Integer, unique=True, nullable=True
+    )  # Only for GitLab users
     username = db.Column(db.String(255), unique=True, nullable=False)
     name = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(255), nullable=False)
@@ -22,7 +24,9 @@ class User(UserMixin, db.Model):
     gitlab_token = db.Column(db.String(255), nullable=True)  # GitLab PAT for API access
     password_change_required = db.Column(db.Boolean, default=False)  # For admin user
     approved = db.Column(db.Boolean, default=True)  # Approval status for new users
-    created_at = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 
     # Selected groups for monitoring
     selected_groups = db.relationship(
@@ -38,7 +42,9 @@ class User(UserMixin, db.Model):
             "email": self.email,
             "avatar_url": self.avatar_url,
             "provider": self.provider,
-            "has_gitlab_token": bool(self.gitlab_token),  # Don't expose the actual token
+            "has_gitlab_token": bool(
+                self.gitlab_token
+            ),  # Don't expose the actual token
             "approved": self.approved,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
@@ -67,7 +73,7 @@ class UserSelectedGroup(db.Model):
 class Project(db.Model):
     __tablename__ = "projects"
 
-    id = db.Column(db.Integer, primary_key=True)   # GitLab project ID
+    id = db.Column(db.Integer, primary_key=True)  # GitLab project ID
     name = db.Column(db.String(255), nullable=False)
     namespace = db.Column(db.String(512), default="")
     web_url = db.Column(db.String(1024), default="")
@@ -75,7 +81,10 @@ class Project(db.Model):
     last_synced_at = db.Column(db.DateTime(timezone=True))
 
     pipelines = db.relationship(
-        "Pipeline", back_populates="project", cascade="all, delete-orphan", lazy="dynamic"
+        "Pipeline",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        lazy="dynamic",
     )
 
     def latest_pipeline(self):
@@ -89,7 +98,9 @@ class Project(db.Model):
             "namespace": self.namespace,
             "web_url": self.web_url,
             "default_branch": self.default_branch,
-            "last_synced_at": self.last_synced_at.isoformat() if self.last_synced_at else None,
+            "last_synced_at": self.last_synced_at.isoformat()
+            if self.last_synced_at
+            else None,
             "latest_pipeline": latest.to_dict() if latest else None,
         }
 
@@ -97,7 +108,7 @@ class Project(db.Model):
 class Pipeline(db.Model):
     __tablename__ = "pipelines"
 
-    id = db.Column(db.Integer, primary_key=True)   # GitLab pipeline ID
+    id = db.Column(db.Integer, primary_key=True)  # GitLab pipeline ID
     project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=False)
     ref = db.Column(db.String(512), default="")
     sha = db.Column(db.String(64), default="")
@@ -137,7 +148,7 @@ class Pipeline(db.Model):
 class PipelineJob(db.Model):
     __tablename__ = "pipeline_jobs"
 
-    id = db.Column(db.Integer, primary_key=True)   # GitLab job ID
+    id = db.Column(db.Integer, primary_key=True)  # GitLab job ID
     pipeline_id = db.Column(db.Integer, db.ForeignKey("pipelines.id"), nullable=False)
     name = db.Column(db.String(255), default="")
     stage = db.Column(db.String(255), default="")
