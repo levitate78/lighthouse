@@ -110,7 +110,7 @@
   <div class="modal-content">
     <div class="modal-header">
       <h3 id="pipeline-modal-title">Pipeline Details</h3>
-      <button class="modal-close" id="pipeline-modal-close">&times;</button>
+      <button class="modal-close" type="button id="pipeline-modal-close">&times;</button>
     </div>
     <div id="pipeline-modal-body" class="modal-body">
       <!-- Pipeline details will be rendered here -->
@@ -122,7 +122,7 @@
   <div class="modal-content">
     <div class="modal-header">
       <h3>Add Group</h3>
-      <button class="modal-close" id="cancel-add-group">&times;</button>
+      <button class="modal-close" type="button id="cancel-add-group">&times;</button>
     </div>
     <div class="modal-body">
       <form id="add-group-form">
@@ -140,7 +140,7 @@
   <div class="modal-content">
     <div class="modal-header">
       <h3>Select Groups</h3>
-      <button class="modal-close" id="groups-modal-close">&times;</button>
+      <button class="modal-close" type="button id="groups-modal-close">&times;</button>
     </div>
     <div id="groups-modal-body" class="modal-body">
       <!-- Groups will be rendered here -->
@@ -155,11 +155,11 @@
   <div class="modal-content">
     <div class="modal-header">
       <h3>Update GitLab Token</h3>
-      <button class="modal-close" id="cancel-update-token">&times;</button>
+      <button class="modal-close" type="button id="cancel-update-token">&times;</button>
     </div>
     <div class="modal-body">
       <form id="update-token-form">
-        <label for="gitlab-token">GitLab Personal Access Token</label>
+        <label for="token-input">GitLab Personal Access Token</label>
         <input type="password" id="token-input" name="token" placeholder="Enter your token">
         <p class="form-help">This token is used to fetch pipeline data from GitLab. It requires 'read_api' and 'read_repository' scopes.</p>
       </form>
@@ -174,7 +174,7 @@
   <div class="modal-content large-modal">
     <div class="modal-header">
       <h3>Admin Panel</h3>
-      <button class="modal-close" id="admin-modal-close">&times;</button>
+      <button class="modal-close" type="button id="admin-modal-close">&times;</button>
     </div>
     <div id="admin-modal-body" class="modal-body">
         <div id="admin-users-list"></div>

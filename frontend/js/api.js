@@ -31,7 +31,8 @@ export async function fetchSummary() {
  * @returns {Promise<Array>}
  */
 export async function fetchProjects() {
-  return get('/api/projects')
+  const response = await get('/api/projects')
+  return response.projects
 }
 
 /**
