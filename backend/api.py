@@ -38,7 +38,7 @@ def api_update_gitlab_token():
         return jsonify({"error": f"Invalid GitLab token: {error_msg}"}), 400
 
     # Update the user's token
-    current_user.gitlab_token = token
+    current_user.gitlab_token_decrypted = token
     try:
         db.session.commit()
         return jsonify({"status": "ok", "message": "GitLab token updated successfully"})
@@ -85,8 +85,8 @@ def api_add_user_group():
     gitlab_token = None
     if current_user.provider == "gitlab" and gitlab_dance.authorized:
         gitlab_token = gitlab_dance.token["access_token"]
-    elif current_user.gitlab_token:
-        gitlab_token = current_user.gitlab_token
+    elif current_user.gitlab_token_decrypted:
+        gitlab_token = current_user.gitlab_token_decrypted
     else:
         return jsonify(
             {
@@ -120,9 +120,8 @@ def api_add_user_group():
         return jsonify(group_obj.to_dict())
     except gitlab.exceptions.GitlabAuthenticationError:
         current_app.logger.warning(
-            "GitLab authentication failed for user %s with token starting with %s...",
+            'GitLab authentication failed for user %s',
             current_user.id,
-            gitlab_token[:10] if gitlab_token else "none",
         )
         return jsonify(
             {"error": "Invalid GitLab token. Please check your token and try again"}
@@ -303,8 +302,12 @@ def api_summary():
 
 @api_bp.route("/api/sync", methods=["POST"])
 @login_required
+@limiter.limit("1 per minute")
 def api_sync():
-    sync_pipelines()
+    group_ids = [g.group_id for g in current_user.selected_groups if g.group_id]
+    if not group_ids:
+        return jsonify({"error": "No groups selected"}), 400
+    sync_pipelines(group_ids=group_ids)
     return jsonify(
         {"status": "ok", "synced_at": datetime.now(timezone.utc).isoformat()}
     )

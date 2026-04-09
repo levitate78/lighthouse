@@ -5,6 +5,9 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("GITLAB_URL", "https://gitlab.example.com")
 os.environ.setdefault("FLASK_DEBUG", "false")
 
+import sys
+sys.path.insert(0, '..')
+
 import pytest
 
 import app as app_module

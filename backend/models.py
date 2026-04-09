@@ -33,7 +33,20 @@ class User(UserMixin, db.Model):
         "UserSelectedGroup", back_populates="user", cascade="all, delete-orphan"
     )
 
-    def to_dict(self):
+    @property
+    def gitlab_token_decrypted(self):
+        if self.gitlab_token:
+            from gitlab_utils import decrypt_token
+            return decrypt_token(self.gitlab_token)
+        return None
+
+    @gitlab_token_decrypted.setter
+    def gitlab_token_decrypted(self, value):
+        if value:
+            from gitlab_utils import encrypt_token
+            self.gitlab_token = encrypt_token(value)
+        else:
+            self.gitlab_token = None
         return {
             "id": self.id,
             "gitlab_id": self.gitlab_id,

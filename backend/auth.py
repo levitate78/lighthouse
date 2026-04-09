@@ -119,9 +119,9 @@ def signup():
             email=form.email.data,
             password_hash=generate_password_hash(form.password.data),
             provider="local",
-            gitlab_token=form.gitlab_token.data if form.gitlab_token.data else None,
             approved=False,  # New users need admin approval
         )
+        user.gitlab_token_decrypted = form.gitlab_token.data
         try:
             db.session.add(user)
             db.session.commit()

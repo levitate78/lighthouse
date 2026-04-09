@@ -18,12 +18,13 @@ def _parse_dt(value):
         return None
 
 
-def sync_pipelines():
+def sync_pipelines(group_ids=None):
     with current_app.app_context():
         gl = get_gitlab_client()
 
-        selected_groups = db.session.query(UserSelectedGroup.group_id).distinct().all()
-        group_ids = [group_id for (group_id,) in selected_groups]
+        if group_ids is None:
+            selected_groups = db.session.query(UserSelectedGroup.group_id).distinct().all()
+            group_ids = [group_id for (group_id,) in selected_groups]
 
         if not group_ids:
             logger.info("No groups selected, skipping sync.")
