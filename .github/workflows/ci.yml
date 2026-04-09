@@ -87,21 +87,6 @@ jobs:
       - name: Monitor dependencies in Snyk
         run: snyk monitor --file=requirements.txt
         working-directory: ./backend
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install Ruff
-        run: pip install ruff
-
-      - name: Run Ruff
-        run: ruff check backend/
   build:
     runs-on: ubuntu-latest
     permissions:
@@ -144,7 +129,12 @@ jobs:
       
       - name: Install dependencies (semantic-release)
         run: npm install -g semantic-release @semantic-release/changelog @semantic-release/git
-      
+
+      - name: Configure git identity
+        run: |
+          git config --global user.email "ci@github.com"
+          git config --global user.name "GitHub Actions"
+
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

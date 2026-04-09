@@ -7,6 +7,18 @@
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
+function getCsrfToken() {
+  return document.querySelector('meta[name="csrf-token"]')?.content || ''
+}
+
+function csrfHeaders(headers = {}) {
+  const token = getCsrfToken()
+  if (token) {
+    return { ...headers, 'X-CSRFToken': token }
+  }
+  return headers
+}
+
 /**
  * Generic GET wrapper.
  * @param {string} path
@@ -69,7 +81,7 @@ export async function fetchUserGroups() {
 export async function addUserGroup(groupData) {
   const response = await fetch('/api/user/groups', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: csrfHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(groupData)
   })
   if (!response.ok) {
@@ -99,7 +111,8 @@ export async function fetchCurrentUser() {
  */
 export async function removeUserGroup(groupId) {
   const response = await fetch(`/api/user/groups/${groupId}`, {
-    method: 'DELETE'
+    method: 'DELETE',
+    headers: csrfHeaders(),
   })
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
   return response.json()
@@ -109,7 +122,7 @@ export async function removeUserGroup(groupId) {
  * @returns {Promise<{status: string, synced_at: string}>}
  */
 export async function triggerSync() {
-  const response = await fetch('/api/sync', { method: 'POST' })
+  const response = await fetch('/api/sync', { method: 'POST', headers: csrfHeaders() })
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
   return response.json()
 }

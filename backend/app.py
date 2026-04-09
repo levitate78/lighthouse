@@ -116,6 +116,7 @@ def create_app():
                 provider="local",
                 password_change_required=True,
                 approved=True,  # Admin is automatically approved
+                is_admin=True,
             )
             db.session.add(admin_user)
             db.session.commit()
@@ -129,7 +130,7 @@ def create_app():
 
     scheduler.add_job(
         id="sync_pipelines",
-        func="sync:sync_pipelines",
+        func="sync:sync_pipelines_background",
         trigger="interval",
         seconds=app.config.get("SYNC_INTERVAL_SECONDS", 60),
         next_run_time=datetime.now(timezone.utc),

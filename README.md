@@ -11,13 +11,21 @@ browsing.
 
 ## Architecture
 
-```
+```text
 gitlab-pipeline-monitor/
-├── app.py                   # Flask app — REST API, Vite manifest helper, scheduler
-├── config.py                # Configuration (reads from .env)
-├── models.py                # SQLAlchemy ORM: Project, Pipeline, PipelineJob
-├── gitlab_client.py         # GitLab API v4 wrapper with pagination
-│
+├── backend/
+│   ├── app.py               # Flask app — REST API, Vite manifest helper, scheduler
+│   ├── config.py            # Configuration (reads from .env)
+│   ├── models.py            # SQLAlchemy ORM: User, Project, Pipeline, PipelineJob
+│   ├── gitlab_utils.py      # GitLab API helper with token encryption
+│   ├── pyproject.toml
+│   ├── templates/
+│   │   └── index.html       # Pure HTML skeleton; Vite assets injected by Jinja2
+│   └── static/
+│       └── dist/            # Vite build output (gitignored)
+│           ├── assets/      # Hashed JS + CSS bundles
+│           └── .vite/
+│               └── manifest.json
 ├── frontend/                # Vite project root
 │   ├── package.json
 │   ├── vite.config.js       # Outputs to ../static/dist/ with manifest
@@ -30,16 +38,6 @@ gitlab-pipeline-monitor/
 │           ├── api.js       # All fetch() calls to the Flask REST API
 │           ├── render.js    # All DOM construction and mutation
 │           └── app.js       # State, event wiring, boot sequence
-│
-├── static/
-│   └── dist/                # Vite build output (gitignored)
-│       ├── assets/          # Hashed JS + CSS bundles
-│       └── .vite/
-│           └── manifest.json
-│
-├── templates/
-│   └── index.html           # Pure HTML skeleton; Vite assets injected by Jinja2
-│
 ├── requirements.txt
 └── .env.example
 ```
@@ -98,7 +96,7 @@ npm run dev
 **Terminal 2 — Flask**:
 ```bash
 # Ensure VITE_DEV_SERVER=http://localhost:5173 is set in .env
-python app.py
+python backend/app.py
 # → http://localhost:5000  (open this in your browser)
 ```
 
@@ -114,8 +112,8 @@ cd frontend && npm run build
 # 2. Unset VITE_DEV_SERVER in .env (or remove the line entirely)
 
 # 3. Run Flask (or Gunicorn)
-python app.py
-# or: gunicorn -w 2 "app:app"
+python backend/app.py
+# or: gunicorn -w 2 "backend.app:app"
 ```
 
 Flask reads `static/dist/.vite/manifest.json` to inject the correct hashed
@@ -153,7 +151,7 @@ filenames into `templates/index.html` at request time.
 
 - **PostgreSQL**: set `DATABASE_URL` to `postgresql+psycopg2://user:pass@host/db`
   and uncomment `psycopg2-binary` in `requirements.txt`
-- **Gunicorn**: use `-w 2` max to avoid duplicate APScheduler instances; or
+- **Gunicorn**: use `-w 2` max to avoid duplicate APScheduler instances, or
   replace APScheduler with a dedicated Celery + Redis worker
 - **Static files**: point Nginx at `static/dist/` so it serves assets directly —
   Flask doesn't need to be in that path at all

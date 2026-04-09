@@ -549,6 +549,18 @@ ul   { list-style: none; }
 .table-empty   { text-align: center; padding: 24px; color: var(--text-muted); font-family: var(--mono); font-size: 12px; }
 
 /* ── Jobs panel ─────────────────────────────────────────────────────────── */
+#jobs-card {
+  display: flex;
+  flex-direction: column;
+  max-height: 60vh;
+}
+
+#jobs-card > #jobs-body {
+  min-height: 180px;
+  max-height: calc(60vh - 52px);
+  overflow-y: auto;
+}
+
 .jobs-placeholder {
   padding: 20px;
   text-align: center;

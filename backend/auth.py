@@ -1,6 +1,7 @@
 from flask import Blueprint, redirect, render_template, url_for, flash
 from flask_login import login_user, logout_user, current_user, login_required
 from flask_dance.contrib.gitlab import gitlab as gitlab_dance
+from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from extensions import db, limiter
@@ -15,15 +16,22 @@ def load_user(user_id):
     return db.session.get(User, int(user_id))
 
 
+def enable_gitlab():
+    from config import Config
+
+    return Config().ENABLE_GITLAB_LOGIN
+
+
 @auth_bp.route("/login")
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("index"))
     form = LoginForm()
-    from config import Config
-
-    enable_gitlab = Config().ENABLE_GITLAB_LOGIN
-    return render_template("login.html", form=form, enable_gitlab=enable_gitlab)
+    return render_template(
+        "login.html",
+        form=form,
+        enable_gitlab=enable_gitlab(),
+    )
 
 
 @auth_bp.route("/gitlab/login")
@@ -52,7 +60,14 @@ def gitlab_login():
                 approved=False,  # GitLab users also need admin approval
             )
             db.session.add(user)
-            db.session.commit()
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                flash(
+                    "Account already exists or a signup conflict occurred. Please try again."
+                )
+                return redirect(url_for("auth.login"))
             flash(
                 "GitLab account linked successfully! Your account is pending administrator approval before you can log in."
             )
@@ -95,13 +110,23 @@ def local_login():
                 flash(
                     "Your account is pending administrator approval. Please try again later."
                 )
-                return render_template("login.html", form=form, login_type="local")
+                return render_template(
+                    "login.html",
+                    form=form,
+                    login_type="local",
+                    enable_gitlab=enable_gitlab(),
+                )
             login_user(user)
             if user.password_change_required:
                 return redirect(url_for("auth.change_password"))
             return redirect(url_for("index"))
         flash("Invalid username or password")
-    return render_template("login.html", form=form, login_type="local")
+    return render_template(
+        "login.html",
+        form=form,
+        login_type="local",
+        enable_gitlab=enable_gitlab(),
+    )
 
 
 @auth_bp.route("/signup", methods=["GET", "POST"])

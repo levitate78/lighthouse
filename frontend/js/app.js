@@ -19,6 +19,15 @@ import {
 
 import { esc } from './utils.js'
 
+function getCsrfToken() {
+  return document.querySelector('meta[name="csrf-token"]')?.content || ''
+}
+
+function csrfHeaders(headers = {}) {
+  const token = getCsrfToken()
+  return token ? { ...headers, 'X-CSRFToken': token } : headers
+}
+
 import {
   renderSummary,
   renderSidebar,
@@ -332,9 +341,9 @@ async function handleUpdateTokenForm(e) {
   try {
     const response = await fetch('/api/user/gitlab-token', {
       method: 'POST',
-      headers: {
+      headers: csrfHeaders({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({ token: tokenInput }),
     });
 
@@ -394,7 +403,10 @@ async function loadAdminUsers() {
 
 async function approveUser(userId) {
   try {
-    const response = await fetch(`/api/admin/users/${userId}/approve`, { method: 'POST' })
+    const response = await fetch(`/api/admin/users/${userId}/approve`, {
+      method: 'POST',
+      headers: csrfHeaders(),
+    })
     if (!response.ok) throw new Error('Failed to approve user')
     loadAdminUsers() // Refresh the list
   } catch (err) {
@@ -406,7 +418,10 @@ async function rejectUser(userId) {
   if (!confirm('Are you sure you want to reject and delete this user?')) return
   
   try {
-    const response = await fetch(`/api/admin/users/${userId}/reject`, { method: 'POST' })
+    const response = await fetch(`/api/admin/users/${userId}/reject`, {
+      method: 'POST',
+      headers: csrfHeaders(),
+    })
     if (!response.ok) throw new Error('Failed to reject user')
     loadAdminUsers() // Refresh the list
   } catch (err) {

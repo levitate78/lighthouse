@@ -24,6 +24,7 @@ class User(UserMixin, db.Model):
     gitlab_token = db.Column(db.String(255), nullable=True)  # GitLab PAT for API access
     password_change_required = db.Column(db.Boolean, default=False)  # For admin user
     approved = db.Column(db.Boolean, default=True)  # Approval status for new users
+    is_admin = db.Column(db.Boolean, default=False)
     created_at = db.Column(
         db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -63,6 +64,7 @@ class User(UserMixin, db.Model):
                 self.gitlab_token
             ),  # Don't expose the actual token
             "approved": self.approved,
+            "is_admin": self.is_admin,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

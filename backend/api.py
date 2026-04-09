@@ -1,5 +1,6 @@
 import gitlab
 from datetime import datetime, timezone
+from functools import wraps
 from flask import Blueprint, current_app, jsonify, request
 from flask_login import login_required, current_user
 from flask_dance.contrib.gitlab import gitlab as gitlab_dance
@@ -170,6 +171,16 @@ def _get_authorized_project_group_ids():
     return [group_id for group_id in group_ids if group_id is not None]
 
 
+def admin_required(view_func):
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if not current_user.is_admin:
+            return jsonify({"error": "Access denied"}), 403
+        return view_func(*args, **kwargs)
+
+    return wrapper
+
+
 @api_bp.route("/api/projects")
 @login_required
 def api_projects():
@@ -310,7 +321,7 @@ def api_sync():
     group_ids = [g.group_id for g in current_user.selected_groups if g.group_id]
     if not group_ids:
         return jsonify({"error": "No groups selected"}), 400
-    result = sync_pipelines(group_ids=group_ids)
+    result = sync_pipelines(group_ids=group_ids, background=True)
     if result["success"]:
         return jsonify(
             {"status": "ok", "synced_at": datetime.now(timezone.utc).isoformat()}
@@ -328,22 +339,16 @@ def api_sync():
 # Admin endpoints for user approval
 @api_bp.route("/api/admin/users")
 @login_required
+@admin_required
 def api_admin_users():
-    # Only allow admin user to access this
-    if current_user.username != "admin":
-        return jsonify({"error": "Access denied"}), 403
-
     users = User.query.order_by(User.created_at.desc()).all()
     return jsonify([user.to_dict() for user in users])
 
 
 @api_bp.route("/api/admin/users/<int:user_id>/approve", methods=["POST"])
 @login_required
+@admin_required
 def api_admin_approve_user(user_id):
-    # Only allow admin user to access this
-    if current_user.username != "admin":
-        return jsonify({"error": "Access denied"}), 403
-
     user = db.get_or_404(User, user_id)
     user.approved = True
     db.session.commit()
@@ -352,11 +357,8 @@ def api_admin_approve_user(user_id):
 
 @api_bp.route("/api/admin/users/<int:user_id>/reject", methods=["POST"])
 @login_required
+@admin_required
 def api_admin_reject_user(user_id):
-    # Only allow admin user to access this
-    if current_user.username != "admin":
-        return jsonify({"error": "Access denied"}), 403
-
     user = db.get_or_404(User, user_id)
     db.session.delete(user)
     db.session.commit()
