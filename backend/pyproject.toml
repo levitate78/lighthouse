@@ -1,10 +1,8 @@
 [project]
 name = "lighthouse"
 version = "0.1.0"
-description = "Default template for PDM package"
-authors = [
-    {name = "levitate78", email = "github.penholder993@passinbox.com"},
-]
+description = "Python backend for Lighthouse."
+
 dependencies = [
     "flask>=3.0",
     "flask-sqlalchemy>=3.1",
@@ -21,14 +19,30 @@ dependencies = [
 ]
 requires-python = "==3.12.*"
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "aGPL-3.0-only"}
 
 
 [tool.pdm]
 distribution = false
 
-[dependency-groups]
-dev = [
-    "safety>=3.7.0",
+
+[tool.pdm.dev-dependencies]
+test = [
+    "pytest",
+    "pytest-cov",
+    "ruff"
 ]
 
+[tool.pdm.scripts]
+test = "pytest --cov=app --cov-report=term-missing"
+lint = { composite = ["ruff format .", "ruff check ."] }
+test-ci = "pytest --cov=app --cov-branch --cov-report=xml --junitxml=junit.xml -o junit_family=legacy"
+lint-ci = { composite = ["ruff format .", "ruff check --output-format=github ."] }
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

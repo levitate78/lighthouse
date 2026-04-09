@@ -2,41 +2,82 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ["main"]
   pull_request:
 
 jobs:
-  ci:
+  # test:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0   # Required for Codecov and semantic-release
+
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "3.12"
+
+  #     - uses: pdm-project/setup-pdm@v4
+  #       with:
+  #         python-version: "3.12"
+  #     - name: Change directory to backend
+  #       run: cd backend
+  #     - name: Setup Environment
+  #       run: pdm install --dev
+  #     - name: Run Linting
+  #       run: pdm lint-ci
+  #     - name: Run Unit Tests
+  #       run: pdm test-ci
+  #     - name: Upload coverage to Codecov
+  #       uses: codecov/codecov-action@v5.5.2
+  #       with:
+  #         files: coverage.xml
+  #         flags: unittests
+  #         report_type: coverage
+  #         fail_ci_if_error: true
+  #         token: ${{ secrets.CODECOV_TOKEN }}
+  #     - name: Upload test results to Codecov
+  #       uses: codecov/codecov-action@v5.5.2
+  #       with:
+  #         files: junit.xml
+  #         flags: unittests
+  #         report_type: test_results
+  #         fail_ci_if_error: true
+  #         token: ${{ secrets.CODECOV_TOKEN }}
+  snyk:
     runs-on: ubuntu-latest
-
-    env:
-      REGISTRY: ghcr.io
-      IMAGE_NAME: ${{ github.repository }}
-
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: pdm-project/setup-pdm@v4
+        with:
+          python-version: "3.12"
+      - name: Change directory to backend
+        run: cd backend
+      - name: Install Python dependencies
+        run: pdm install
+      - name: Export dependencies for Snyk
+        run: pdm export -f requirements --without-hashes --output requirements.txt
+      - name: Install exported requirements
+        run: pip install -r requirements.txt
+      - name: Install Snyk CLI
+        run: npm install -g snyk snyk-to-sarif
+      - name: Authenticate Snyk
+        run: snyk auth ${{ secrets.SNYK_TOKEN }}
+      - name: Run Snyk test and generate SARIF
+        run: snyk test --file=requirements.txt --json | snyk-to-sarif -o snyk-report.sarif
+      - name: Monitor dependencies in Snyk
+        run: snyk monitor --file=requirements.txt
+  lint:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      # ----------------------
-      # 1. Snyk Security Scan
-      # ----------------------
-      - name: Set up Node (for Snyk + semantic-release)
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install Snyk
-        run: npm install -g snyk
-
-      - name: Authenticate Snyk
-        run: snyk auth ${{ secrets.SNYK_TOKEN }}
-
-      - name: Run Snyk scan
-        run: snyk test --all-projects
-
-      # ----------------------
-      # 2. Ruff Lint (Python)
-      # ----------------------
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -47,10 +88,12 @@ jobs:
 
       - name: Run Ruff
         run: ruff check backend/
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # ----------------------
-      # 3. Build Docker Images
-      # ----------------------
       - name: Log in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
@@ -67,15 +110,18 @@ jobs:
 
       - name: Push frontend image
         run: docker push $REGISTRY/$IMAGE_NAME-frontend:latest
-
-      # ----------------------
-      # 4. Semantic Release
-      # ----------------------
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
       - name: Install dependencies (semantic-release)
         run: npm install -g semantic-release @semantic-release/changelog @semantic-release/git
-
+      
       - name: Run semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: semantic-release
-        if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
