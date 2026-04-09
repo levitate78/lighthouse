@@ -13,9 +13,7 @@ RUN npm run build
 # Production stage
 FROM nginx:alpine
 
-RUN addgroup -g 1001 -S nginx && \
-    adduser -u 1001 -S nginx -G nginx && \
-    chown -R nginx:nginx /usr/share/nginx/html && \
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
     chown -R nginx:nginx /var/cache/nginx && \
     chown -R nginx:nginx /var/log/nginx && \
     touch /var/run/nginx.pid && \
