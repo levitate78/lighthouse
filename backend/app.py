@@ -35,7 +35,7 @@ def create_app():
     cors.init_app(
         app, resources={r"/api/*": {"origins": "*"}}
     )  # Restrict in production
-    csrf = CSRFProtect(app)
+    csrf = CSRFProtect(app)  # noqa: F841
     login_manager.login_view = "auth.login"
     login_manager.user_loader(load_user)
 

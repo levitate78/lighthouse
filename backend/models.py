@@ -113,7 +113,11 @@ class Project(db.Model):
             # Pipelines are already loaded; find the latest
             return max(self.pipelines, key=lambda p: p.created_at or datetime.min)
         # Fallback to query if pipelines aren't loaded
-        return Pipeline.query.filter_by(project_id=self.id).order_by(Pipeline.created_at.desc()).first()
+        return (
+            Pipeline.query.filter_by(project_id=self.id)
+            .order_by(Pipeline.created_at.desc())
+            .first()
+        )
 
     def to_dict(self):
         latest = self.latest_pipeline()

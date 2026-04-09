@@ -36,9 +36,9 @@ def gitlab_login():
         user_info = resp.json()
         user = db.session.query(User).filter_by(gitlab_id=user_info["id"]).first()
         if not user:
-            existing_username = db.session.query(User).filter_by(
-                username=user_info["username"]
-            ).first()
+            existing_username = (
+                db.session.query(User).filter_by(username=user_info["username"]).first()
+            )
             if existing_username:
                 flash("A user with that username already exists.")
                 return redirect(url_for("auth.login"))
@@ -81,10 +81,16 @@ def local_login():
         return redirect(url_for("index"))
     form = LoginForm()
     if form.validate_on_submit():
-        user = db.session.query(User).filter_by(
-            username=form.username.data, provider="local"
-        ).first()
-        if user and user.password_hash and check_password_hash(user.password_hash, form.password.data):
+        user = (
+            db.session.query(User)
+            .filter_by(username=form.username.data, provider="local")
+            .first()
+        )
+        if (
+            user
+            and user.password_hash
+            and check_password_hash(user.password_hash, form.password.data)
+        ):
             if not user.approved:
                 flash(
                     "Your account is pending administrator approval. Please try again later."

@@ -119,7 +119,9 @@ def sync_pipelines(group_ids=None):
                 except Exception as exc:
                     db.session.rollback()
                     logger.warning("Failed to sync group %s: %s", group_id, exc)
-                    results["failures"].append({"group_id": group_id, "error": str(exc)})
+                    results["failures"].append(
+                        {"group_id": group_id, "error": str(exc)}
+                    )
             if results["failures"]:
                 results["success"] = False
         except Exception as exc:
