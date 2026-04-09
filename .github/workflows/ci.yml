@@ -57,14 +57,15 @@ jobs:
       - uses: pdm-project/setup-pdm@v4
         with:
           python-version: "3.12"
-      - name: Change directory to backend
-        run: cd backend
       - name: Install Python dependencies
         run: pdm install
+        working-directory: ./backend
       - name: Export dependencies for Snyk
         run: pdm export -f requirements --without-hashes --output requirements.txt
+        working-directory: ./backend
       - name: Install exported requirements
         run: pip install -r requirements.txt
+        working-directory: ./backend
       - name: Install Snyk CLI
         run: npm install -g snyk snyk-to-sarif
       - name: Authenticate Snyk
