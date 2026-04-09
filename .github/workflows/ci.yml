@@ -66,9 +66,8 @@ jobs:
       - name: Install dependencies
         run: pdm install --dev
         working-directory: ./backend
-
       - name: Export dependencies for Snyk
-        run: pip freeze > requirements.txt
+        run: pdm export -f requirements --without-hashes --output requirements.txt
         working-directory: ./backend
       - name: Install exported requirements
         run: pip install -r requirements.txt
@@ -81,7 +80,7 @@ jobs:
         run: snyk test --file=requirements.txt --sarif-file-output=snyk-report.sarif || true
         working-directory: ./backend
       - name: Upload Snyk SARIF report to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: snyk-report.sarif
         if: always()  # Ensure this runs even if Snyk test fails
