@@ -36,6 +36,10 @@ def gitlab_login():
         user_info = resp.json()
         user = User.query.filter_by(gitlab_id=user_info["id"]).first()
         if not user:
+            existing_username = User.query.filter_by(username=user_info["username"]).first()
+            if existing_username:
+                flash("A user with that username already exists.")
+                return redirect(url_for("auth.login"))
             user = User(
                 gitlab_id=user_info["id"],
                 username=user_info["username"],
@@ -135,6 +139,9 @@ def signup():
 @auth_bp.route("/change-password", methods=["GET", "POST"])
 @login_required
 def change_password():
+    if current_user.provider != "local" or not current_user.password_hash:
+        flash("Password change is only available for local accounts.")
+        return redirect(url_for("index"))
     form = ChangePasswordForm()
     if form.validate_on_submit():
         if not check_password_hash(

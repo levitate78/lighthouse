@@ -37,7 +37,7 @@ def sync_pipelines():
 
                     for proj in projects:
                         proj_data = proj.asdict()
-                        project = Project.query.get(proj_data["id"])
+                        project = db.session.get(Project, proj_data["id"])
                         if not project:
                             project = Project(id=proj_data["id"])
                             db.session.add(project)
@@ -58,7 +58,7 @@ def sync_pipelines():
 
                         for pipe in pipelines:
                             pipe_data = pipe.asdict()
-                            pipeline = Pipeline.query.get(pipe_data["id"])
+                            pipeline = db.session.get(Pipeline, pipe_data["id"])
                             if not pipeline:
                                 pipeline = Pipeline(id=pipe_data["id"])
                                 db.session.add(pipeline)
@@ -110,11 +110,11 @@ def sync_pipelines():
                                         else "",
                                     )
                                     db.session.add(job_obj)
+                    db.session.commit()
+                    logger.info("Sync complete for group %s.", group_id)
                 except Exception as exc:
+                    db.session.rollback()
                     logger.warning("Failed to sync group %s: %s", group_id, exc)
-
-            db.session.commit()
-            logger.info("Pipeline sync complete.")
         except Exception as exc:
             db.session.rollback()
             logger.error("Sync failed: %s", exc)

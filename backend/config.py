@@ -31,7 +31,10 @@ class Config:
     GITLAB_GROUP_ID = os.getenv("GITLAB_GROUP_ID", "")  # Group ID or URL-encoded path
 
     # Sync interval in seconds (default: 60)
-    SYNC_INTERVAL_SECONDS = int(os.getenv("SYNC_INTERVAL_SECONDS", "60"))
+    try:
+        SYNC_INTERVAL_SECONDS = int(os.getenv("SYNC_INTERVAL_SECONDS", "60"))
+    except ValueError:
+        raise ValueError("SYNC_INTERVAL_SECONDS must be an integer")
 
     # Vite dev server URL — set this when running `npm run dev` locally.
     # Leave blank in production (assets are served from static/dist/).

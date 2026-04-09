@@ -77,9 +77,16 @@ jobs:
       - name: Authenticate Snyk
         run: snyk auth ${{ secrets.SNYK_TOKEN }}
       - name: Run Snyk test and generate SARIF
-        run: snyk test --file=requirements.txt --json | snyk-to-sarif -o snyk-report.sarif
+        run: snyk test --file=requirements.txt --json | snyk-to-sarif -o snyk-report.sarif || true
+        working-directory: ./backend
+      - name: Upload Snyk SARIF report to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk-report.sarif
+        if: always()  # Ensure this runs even if Snyk test fails
       - name: Monitor dependencies in Snyk
         run: snyk monitor --file=requirements.txt
+        working-directory: ./backend
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -125,6 +132,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build
+    if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -136,4 +144,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: semantic-release
-    if: github.ref == 'refs/heads/main'

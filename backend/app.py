@@ -140,4 +140,10 @@ def create_app():
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=False, host="0.0.0.0", port=5000)
+    debug = app.config.get("DEBUG", False)
+    app.run(
+        debug=debug,
+        use_reloader=debug,
+        host=app.config.get("HOST", "127.0.0.1"),
+        port=app.config.get("PORT", 5000),
+    )
