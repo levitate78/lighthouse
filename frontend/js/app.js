@@ -63,7 +63,7 @@ async function handleRemoveGroup(groupId) {
     
     // Remove projects that belong to the removed group
     if (removedGroup) {
-      state.projects = state.projects.filter(p => p.namespace !== removedGroup.group_full_path)
+      state.projects = state.projects.filter(p => p.group_id !== removedGroup.group_id)
       
       // If the currently active project was removed, clear the selection
       if (state.activeProject && state.projects.find(p => p.id === state.activeProject.id) === undefined) {

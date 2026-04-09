@@ -13,8 +13,8 @@ class SignupForm(FlaskForm):
     username = StringField(
         "Username", validators=[DataRequired(), Length(min=3, max=50)]
     )
-    name = StringField("Full Name", validators=[DataRequired()])
-    email = StringField("Email", validators=[DataRequired(), Email()])
+    name = StringField("Full Name", validators=[DataRequired(), Length(max=255)])
+    email = StringField("Email", validators=[DataRequired(), Email(), Length(max=255)])
     password = PasswordField("Password", validators=[DataRequired(), Length(min=6)])
     confirm_password = PasswordField(
         "Confirm Password", validators=[DataRequired(), EqualTo("password")]

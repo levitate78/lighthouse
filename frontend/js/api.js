@@ -73,14 +73,13 @@ export async function addUserGroup(groupData) {
     body: JSON.stringify(groupData)
   })
   if (!response.ok) {
-    // Try to parse JSON error response
+    let errorData = null
     try {
-      const errorData = await response.json()
-      throw new Error(errorData.error || `${response.status} ${response.statusText}`)
-    } catch (jsonError) {
-      // If JSON parsing fails, use the status text
-      throw new Error(`${response.status} ${response.statusText}`)
+      errorData = await response.json()
+    } catch {
+      // Ignore JSON parsing errors
     }
+    throw new Error(errorData?.error || `${response.status} ${response.statusText}`)
   }
   return response.json()
 }

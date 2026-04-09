@@ -27,8 +27,8 @@ def decrypt_token(encrypted):
     try:
         f = get_fernet()
         return f.decrypt(encrypted.encode()).decode()
-    except InvalidToken:
-        logger.warning("Failed to decrypt GitLab token: invalid token")
+    except (InvalidToken, UnicodeDecodeError) as exc:
+        logger.warning("Failed to decrypt GitLab token: %s", exc)
         return None
 
 

@@ -34,9 +34,9 @@ def gitlab_login():
     resp = gitlab_dance.get("/api/v4/user")
     if resp.ok:
         user_info = resp.json()
-        user = User.query.filter_by(gitlab_id=user_info["id"]).first()
+        user = db.session.query(User).filter_by(gitlab_id=user_info["id"]).first()
         if not user:
-            existing_username = User.query.filter_by(
+            existing_username = db.session.query(User).filter_by(
                 username=user_info["username"]
             ).first()
             if existing_username:
@@ -81,10 +81,10 @@ def local_login():
         return redirect(url_for("index"))
     form = LoginForm()
     if form.validate_on_submit():
-        user = User.query.filter_by(
+        user = db.session.query(User).filter_by(
             username=form.username.data, provider="local"
         ).first()
-        if user and check_password_hash(user.password_hash, form.password.data):
+        if user and user.password_hash and check_password_hash(user.password_hash, form.password.data):
             if not user.approved:
                 flash(
                     "Your account is pending administrator approval. Please try again later."
@@ -105,7 +105,7 @@ def signup():
         return redirect(url_for("index"))
     form = SignupForm()
     if form.validate_on_submit():
-        if User.query.filter_by(username=form.username.data).first():
+        if db.session.query(User).filter_by(username=form.username.data).first():
             flash("Username already exists")
             return render_template("signup.html", form=form)
 

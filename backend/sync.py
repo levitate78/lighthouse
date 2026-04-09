@@ -19,6 +19,7 @@ def _parse_dt(value):
 
 
 def sync_pipelines(group_ids=None):
+    results = {"success": True, "failures": []}
     with current_app.app_context():
         gl = get_gitlab_client()
 
@@ -30,7 +31,7 @@ def sync_pipelines(group_ids=None):
 
         if not group_ids:
             logger.info("No groups selected, skipping sync.")
-            return
+            return results
 
         try:
             for group_id in group_ids:
@@ -118,6 +119,12 @@ def sync_pipelines(group_ids=None):
                 except Exception as exc:
                     db.session.rollback()
                     logger.warning("Failed to sync group %s: %s", group_id, exc)
+                    results["failures"].append({"group_id": group_id, "error": str(exc)})
+            if results["failures"]:
+                results["success"] = False
         except Exception as exc:
             db.session.rollback()
             logger.error("Sync failed: %s", exc)
+            results["success"] = False
+            results["failures"].append({"error": str(exc)})
+    return results

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from flask import Flask, render_template
 from flask_login import login_required
 from flask_dance.contrib.gitlab import make_gitlab_blueprint
+from flask_wtf import CSRFProtect
 from werkzeug.security import generate_password_hash
 
 from config import Config
@@ -34,6 +35,7 @@ def create_app():
     cors.init_app(
         app, resources={r"/api/*": {"origins": "*"}}
     )  # Restrict in production
+    csrf = CSRFProtect(app)
     login_manager.login_view = "auth.login"
     login_manager.user_loader(load_user)
 

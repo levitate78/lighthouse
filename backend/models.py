@@ -103,11 +103,17 @@ class Project(db.Model):
         "Pipeline",
         back_populates="project",
         cascade="all, delete-orphan",
-        lazy="dynamic",
+        lazy="select",  # Changed from "dynamic" to "select" for eager loading
     )
 
     def latest_pipeline(self):
-        return self.pipelines.order_by(Pipeline.created_at.desc()).first()
+        # Find the latest pipeline from the already-loaded pipelines collection
+        # or query if needed (e.g., when called individually)
+        if self.pipelines:
+            # Pipelines are already loaded; find the latest
+            return max(self.pipelines, key=lambda p: p.created_at or datetime.min)
+        # Fallback to query if pipelines aren't loaded
+        return Pipeline.query.filter_by(project_id=self.id).order_by(Pipeline.created_at.desc()).first()
 
     def to_dict(self):
         latest = self.latest_pipeline()

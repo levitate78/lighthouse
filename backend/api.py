@@ -209,9 +209,6 @@ def api_pipelines(project_id):
     if project_id <= 0:
         return jsonify({"error": "Invalid project ID"}), 400
 
-    if project_id <= 0:
-        return jsonify({"error": "Invalid project ID"}), 400
-
     group_ids = _get_authorized_project_group_ids()
     if not group_ids:
         return jsonify({"error": "Project not found"}), 404
@@ -313,10 +310,19 @@ def api_sync():
     group_ids = [g.group_id for g in current_user.selected_groups if g.group_id]
     if not group_ids:
         return jsonify({"error": "No groups selected"}), 400
-    sync_pipelines(group_ids=group_ids)
-    return jsonify(
-        {"status": "ok", "synced_at": datetime.now(timezone.utc).isoformat()}
-    )
+    result = sync_pipelines(group_ids=group_ids)
+    if result["success"]:
+        return jsonify(
+            {"status": "ok", "synced_at": datetime.now(timezone.utc).isoformat()}
+        )
+    else:
+        return jsonify(
+            {
+                "status": "partial",
+                "synced_at": datetime.now(timezone.utc).isoformat(),
+                "failures": result["failures"],
+            }
+        ), 207  # Multi-Status
 
 
 # Admin endpoints for user approval
@@ -338,7 +344,7 @@ def api_admin_approve_user(user_id):
     if current_user.username != "admin":
         return jsonify({"error": "Access denied"}), 403
 
-    user = User.query.get_or_404(user_id)
+    user = db.get_or_404(User, user_id)
     user.approved = True
     db.session.commit()
     return jsonify({"status": "ok", "user": user.to_dict()})
@@ -351,7 +357,7 @@ def api_admin_reject_user(user_id):
     if current_user.username != "admin":
         return jsonify({"error": "Access denied"}), 403
 
-    user = User.query.get_or_404(user_id)
+    user = db.get_or_404(User, user_id)
     db.session.delete(user)
     db.session.commit()
     return jsonify({"status": "ok"})

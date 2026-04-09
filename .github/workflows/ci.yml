@@ -36,7 +36,7 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5.5.2
         with:
-          files: coverage.xml
+          files: backend/coverage.xml
           flags: unittests
           report_type: coverage
           fail_ci_if_error: true
@@ -45,7 +45,7 @@ jobs:
       - name: Upload test results to Codecov
         uses: codecov/codecov-action@v5.5.2
         with:
-          files: junit.xml
+          files: backend/junit.xml
           flags: unittests
           report_type: test_results
           fail_ci_if_error: true
@@ -82,7 +82,7 @@ jobs:
       - name: Upload Snyk SARIF report to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: snyk-report.sarif
+          sarif_file: backend/snyk-report.sarif
         if: always()  # Ensure this runs even if Snyk test fails
       - name: Monitor dependencies in Snyk
         run: snyk monitor --file=requirements.txt

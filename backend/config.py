@@ -20,6 +20,13 @@ class Config:
             "SECRET_KEY environment variable is required and cannot be empty"
         )
 
+    # GitLab token encryption key (REQUIRED)
+    GLT_SECRET_KEY = os.getenv("GLT_SECRET_KEY")
+    if not GLT_SECRET_KEY:
+        raise ValueError(
+            "GLT_SECRET_KEY environment variable is required and cannot be empty"
+        )
+
     # Database — SQLite by default, swap for PostgreSQL in production:
     #   postgresql+psycopg2://user:password@host/dbname
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///pipeline_monitor.db")
@@ -33,8 +40,10 @@ class Config:
     # Sync interval in seconds (default: 60)
     try:
         SYNC_INTERVAL_SECONDS = int(os.getenv("SYNC_INTERVAL_SECONDS", "60"))
+        if SYNC_INTERVAL_SECONDS <= 0:
+            raise ValueError("SYNC_INTERVAL_SECONDS must be a positive integer")
     except ValueError:
-        raise ValueError("SYNC_INTERVAL_SECONDS must be an integer")
+        raise ValueError("SYNC_INTERVAL_SECONDS must be a positive integer")
 
     # Vite dev server URL — set this when running `npm run dev` locally.
     # Leave blank in production (assets are served from static/dist/).

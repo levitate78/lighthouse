@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: lighthouse
       POSTGRES_USER: lighthouse
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -17,8 +17,9 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql+psycopg2://lighthouse:password@db/lighthouse
-      SECRET_KEY: your-secret-key
+      DATABASE_URL: postgresql+psycopg2://lighthouse:${POSTGRES_PASSWORD:-password}@db/lighthouse
+      SECRET_KEY: ${SECRET_KEY}
+      GLT_SECRET_KEY: ${GLT_SECRET_KEY}
       FLASK_DEBUG: "false"
       # Add other env vars as needed
     depends_on:
