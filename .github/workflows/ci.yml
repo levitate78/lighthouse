@@ -90,6 +90,9 @@ jobs:
         run: ruff check backend/
   build:
     runs-on: ubuntu-latest
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -106,9 +109,11 @@ jobs:
           docker build -t $REGISTRY/$IMAGE_NAME-frontend:latest ./frontend
 
       - name: Push backend image
+        if: github.ref == 'refs/heads/main'
         run: docker push $REGISTRY/$IMAGE_NAME-backend:latest
 
       - name: Push frontend image
+        if: github.ref == 'refs/heads/main'
         run: docker push $REGISTRY/$IMAGE_NAME-frontend:latest
   deploy:
     runs-on: ubuntu-latest
