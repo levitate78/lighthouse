@@ -8,7 +8,12 @@ def test_get_authorized_project_group_ids(monkeypatch):
     dummy_user = type(
         "DummyUser",
         (),
-        {"selected_groups": [type("G", (), {"group_id": 1})(), type("G", (), {"group_id": None})()]},
+        {
+            "selected_groups": [
+                type("G", (), {"group_id": 1})(),
+                type("G", (), {"group_id": None})(),
+            ]
+        },
     )
     monkeypatch.setattr(api, "current_user", dummy_user)
 

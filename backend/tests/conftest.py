@@ -13,12 +13,14 @@ from extensions import db
 # Prevent the scheduler from starting during tests.
 app_module.scheduler.start = lambda *args, **kwargs: None
 
+
 @pytest.fixture(scope="session")
 def app():
     test_app = app_module.create_app()
     test_app.config.update({"TESTING": True, "WTF_CSRF_ENABLED": False})
     with test_app.app_context():
         yield test_app
+
 
 @pytest.fixture(autouse=True)
 def cleanup_db(app):
