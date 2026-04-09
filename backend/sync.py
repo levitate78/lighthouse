@@ -41,6 +41,7 @@ def sync_pipelines():
                         if not project:
                             project = Project(id=proj_data["id"])
                             db.session.add(project)
+                        project.group_id = group_id
                         project.name = proj_data["name"]
                         project.namespace = proj_data.get("namespace", {}).get(
                             "full_path", ""

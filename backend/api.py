@@ -160,11 +160,42 @@ def api_remove_user_group(group_id):
     return jsonify({"status": "ok"})
 
 
+def _get_authorized_project_group_ids():
+    group_ids = [group.group_id for group in current_user.selected_groups]
+    return [group_id for group_id in group_ids if group_id is not None]
+
+
 @api_bp.route("/api/projects")
 @login_required
 def api_projects():
-    projects = Project.query.order_by(Project.name).all()
-    return jsonify([p.to_dict() for p in projects])
+    group_ids = _get_authorized_project_group_ids()
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 25, type=int)
+    per_page = max(1, min(per_page, 100))
+
+    if not group_ids:
+        return jsonify(
+            {
+                "projects": [],
+                "page": page,
+                "per_page": per_page,
+                "total": 0,
+                "pages": 0,
+            }
+        )
+
+    query = Project.query.filter(Project.group_id.in_(group_ids)).order_by(Project.name)
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+
+    return jsonify(
+        {
+            "projects": [p.to_dict() for p in pagination.items],
+            "page": pagination.page,
+            "per_page": pagination.per_page,
+            "total": pagination.total,
+            "pages": pagination.pages,
+        }
+    )
 
 
 @api_bp.route("/api/projects/<int:project_id>/pipelines")
@@ -172,6 +203,20 @@ def api_projects():
 def api_pipelines(project_id):
     if project_id <= 0:
         return jsonify({"error": "Invalid project ID"}), 400
+
+    if project_id <= 0:
+        return jsonify({"error": "Invalid project ID"}), 400
+
+    group_ids = _get_authorized_project_group_ids()
+    if not group_ids:
+        return jsonify({"error": "Project not found"}), 404
+
+    project = Project.query.filter(
+        Project.id == project_id,
+        Project.group_id.in_(group_ids),
+    ).first()
+    if not project:
+        return jsonify({"error": "Project not found"}), 404
 
     limit = request.args.get("limit", 10, type=int)
     if limit < 1 or limit > 100:
@@ -192,14 +237,36 @@ def api_jobs(pipeline_id):
     if pipeline_id <= 0:
         return jsonify({"error": "Invalid pipeline ID"}), 400
 
-    jobs = PipelineJob.query.filter_by(pipeline_id=pipeline_id).all()
+    group_ids = _get_authorized_project_group_ids()
+    if not group_ids:
+        return jsonify({"error": "Pipeline not found"}), 404
+
+    jobs = (
+        PipelineJob.query.join(Pipeline)
+        .join(Project)
+        .filter(
+            PipelineJob.pipeline_id == pipeline_id,
+            Project.group_id.in_(group_ids),
+        )
+        .all()
+    )
     return jsonify([j.to_dict() for j in jobs])
 
 
 @api_bp.route("/api/summary")
 @login_required
 def api_summary():
-    total_projects = Project.query.count()
+    group_ids = _get_authorized_project_group_ids()
+    if not group_ids:
+        return jsonify(
+            {
+                "total_projects": 0,
+                "status_counts": {},
+                "total_latest_pipelines": 0,
+            }
+        )
+
+    total_projects = Project.query.filter(Project.group_id.in_(group_ids)).count()
     from sqlalchemy import func
 
     sub = (
@@ -217,6 +284,8 @@ def api_summary():
             (Pipeline.project_id == sub.c.project_id)
             & (Pipeline.created_at == sub.c.max_created),
         )
+        .join(Project, Pipeline.project_id == Project.id)
+        .filter(Project.group_id.in_(group_ids))
         .all()
     )
     status_counts = {}

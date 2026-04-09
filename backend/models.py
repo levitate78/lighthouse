@@ -72,8 +72,10 @@ class UserSelectedGroup(db.Model):
 
 class Project(db.Model):
     __tablename__ = "projects"
+    __table_args__ = (db.Index("ix_projects_group_id", "group_id"),)
 
     id = db.Column(db.Integer, primary_key=True)  # GitLab project ID
+    group_id = db.Column(db.Integer, nullable=True)
     name = db.Column(db.String(255), nullable=False)
     namespace = db.Column(db.String(512), default="")
     web_url = db.Column(db.String(1024), default="")
