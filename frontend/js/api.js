@@ -5,13 +5,15 @@
  * or rejects with an Error containing the HTTP status message.
  */
 
+const API_BASE = import.meta.env.VITE_API_BASE || '';
+
 /**
  * Generic GET wrapper.
  * @param {string} path
  * @returns {Promise<any>}
  */
 async function get(path) {
-  const response = await fetch(path)
+  const response = await fetch(API_BASE + path)
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
   return response.json()
 }

@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ----------------------
+      # 1. Snyk Security Scan
+      # ----------------------
+      - name: Set up Node (for Snyk + semantic-release)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Snyk
+        run: npm install -g snyk
+
+      - name: Authenticate Snyk
+        run: snyk auth ${{ secrets.SNYK_TOKEN }}
+
+      - name: Run Snyk scan
+        run: snyk test --all-projects
+
+      # ----------------------
+      # 2. Ruff Lint (Python)
+      # ----------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Run Ruff
+        run: ruff check backend/
+
+      # ----------------------
+      # 3. Build Docker Images
+      # ----------------------
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build backend image
+        run: |
+          docker build -t $REGISTRY/$IMAGE_NAME-backend:latest ./backend
+
+      - name: Build frontend image
+        run: |
+          docker build -t $REGISTRY/$IMAGE_NAME-frontend:latest ./frontend
+
+      - name: Push backend image
+        run: docker push $REGISTRY/$IMAGE_NAME-backend:latest
+
+      - name: Push frontend image
+        run: docker push $REGISTRY/$IMAGE_NAME-frontend:latest
+
+      # ----------------------
+      # 4. Semantic Release
+      # ----------------------
+      - name: Install dependencies (semantic-release)
+        run: npm install -g semantic-release @semantic-release/changelog @semantic-release/git
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: semantic-release
+        if: github.ref == 'refs/heads/main'
