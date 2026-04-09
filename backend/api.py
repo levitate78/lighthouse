@@ -26,6 +26,9 @@ def api_update_gitlab_token():
     except Exception as exc:
         return jsonify({"error": f"Invalid JSON: {exc}"}), 400
 
+    if not isinstance(data, dict):
+        return jsonify({"error": "Request body must be a JSON object"}), 400
+
     token = data.get("token", "").strip()
     if not token:
         return jsonify({"error": "Token is required"}), 400
@@ -64,6 +67,9 @@ def api_add_user_group():
         data = request.get_json()
     except Exception as exc:
         return jsonify({"error": f"Invalid JSON: {exc}"}), 400
+
+    if not isinstance(data, dict):
+        return jsonify({"error": "Request body must be a JSON object"}), 400
 
     group_identifier = data.get("group_id") or data.get("group_path")
     if not group_identifier:

@@ -36,7 +36,7 @@ def sync_pipelines(group_ids=None):
             for group_id in group_ids:
                 try:
                     group = gl.groups.get(group_id)
-                    projects = group.projects.list(all=True)
+                    projects = group.projects.list(get_all=True)
 
                     for proj in projects:
                         proj_data = proj.asdict()
@@ -85,7 +85,7 @@ def sync_pipelines(group_ids=None):
                                 jobs = (
                                     gl.projects.get(proj_data["id"])
                                     .pipelines.get(pipe_data["id"])
-                                    .jobs.list()
+                                    .jobs.list(get_all=True)
                                 )
                                 PipelineJob.query.filter_by(
                                     pipeline_id=pipe_data["id"]

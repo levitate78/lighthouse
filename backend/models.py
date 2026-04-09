@@ -49,6 +49,8 @@ class User(UserMixin, db.Model):
             self.gitlab_token = encrypt_token(value)
         else:
             self.gitlab_token = None
+
+    def to_dict(self):
         return {
             "id": self.id,
             "gitlab_id": self.gitlab_id,

@@ -12,7 +12,7 @@ auth_bp = Blueprint("auth", __name__)
 
 
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 
 @auth_bp.route("/login")

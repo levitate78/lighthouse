@@ -1,13 +1,13 @@
 # Build stage
 FROM node:24-alpine AS build
 
-WORKDIR /app
+WORKDIR /app/frontend
 
-COPY package*.json ./
+COPY frontend/package*.json ./
 RUN npm install
 
-COPY . .
-ENV VITE_API_BASE=http://backend:5000
+COPY frontend/ .
+ENV VITE_API_BASE=
 RUN npm run build
 
 # Production stage
@@ -19,10 +19,10 @@ RUN chown -R nginx:nginx /usr/share/nginx/html && \
     touch /var/run/nginx.pid && \
     chown -R nginx:nginx /var/run/nginx.pid
 
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=build /app/backend/static/dist /usr/share/nginx/html
 
 # Copy custom nginx config
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY frontend/nginx.conf /etc/nginx/nginx.conf
 
 EXPOSE 80
 

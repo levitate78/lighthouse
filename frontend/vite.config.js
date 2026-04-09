@@ -16,7 +16,7 @@ export default defineConfig({
 
   build: {
     // Output directory relative to project root (frontend/)
-    outDir: 'dist',
+    outDir: resolve(__dirname, '../backend/static/dist'),
 
     // Emit manifest.json so Flask can resolve hashed filenames
     manifest: true,

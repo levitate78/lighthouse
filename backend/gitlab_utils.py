@@ -2,7 +2,7 @@ import logging
 from flask import current_app
 import requests
 import gitlab
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 import base64
 import hashlib
 
@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_fernet():
-    key = hashlib.sha256(current_app.config["SECRET_KEY"].encode()).digest()
+    key = hashlib.sha256(current_app.config["GLT_SECRET_KEY"].encode()).digest()
     return Fernet(base64.urlsafe_b64encode(key))
 
 
@@ -24,8 +24,12 @@ def encrypt_token(token):
 def decrypt_token(encrypted):
     if not encrypted:
         return None
-    f = get_fernet()
-    return f.decrypt(encrypted.encode()).decode()
+    try:
+        f = get_fernet()
+        return f.decrypt(encrypted.encode()).decode()
+    except InvalidToken:
+        logger.warning("Failed to decrypt GitLab token: invalid token")
+        return None
 
 
 def get_gitlab_client(private_token=None):
@@ -68,4 +72,4 @@ def validate_gitlab_token(token: str) -> tuple[bool, str]:
     logger.warning(
         "GitLab token validation returned %s: %s", response.status_code, response.text
     )
-    return False, f"GitLab API returned {response.status_code}: {response.text}"
+    return False, f"GitLab API returned unexpected status {response.status_code}"

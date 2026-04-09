@@ -29,8 +29,7 @@ def app():
 @pytest.fixture(autouse=True)
 def cleanup_db(app):
     yield
-    with app.app_context():
-        db.session.rollback()
-        for table in reversed(db.metadata.sorted_tables):
-            db.session.execute(table.delete())
-        db.session.commit()
+    db.session.rollback()
+    for table in reversed(db.metadata.sorted_tables):
+        db.session.execute(table.delete())
+    db.session.commit()
