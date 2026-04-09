@@ -6,44 +6,50 @@ on:
   pull_request:
 
 jobs:
-  # test:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0   # Required for Codecov and semantic-release
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Required for Codecov and semantic-release
 
-  #     - uses: actions/setup-python@v5
-  #       with:
-  #         python-version: "3.12"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-  #     - uses: pdm-project/setup-pdm@v4
-  #       with:
-  #         python-version: "3.12"
-  #     - name: Change directory to backend
-  #       run: cd backend
-  #     - name: Setup Environment
-  #       run: pdm install --dev
-  #     - name: Run Linting
-  #       run: pdm lint-ci
-  #     - name: Run Unit Tests
-  #       run: pdm test-ci
-  #     - name: Upload coverage to Codecov
-  #       uses: codecov/codecov-action@v5.5.2
-  #       with:
-  #         files: coverage.xml
-  #         flags: unittests
-  #         report_type: coverage
-  #         fail_ci_if_error: true
-  #         token: ${{ secrets.CODECOV_TOKEN }}
-  #     - name: Upload test results to Codecov
-  #       uses: codecov/codecov-action@v5.5.2
-  #       with:
-  #         files: junit.xml
-  #         flags: unittests
-  #         report_type: test_results
-  #         fail_ci_if_error: true
-  #         token: ${{ secrets.CODECOV_TOKEN }}
+      - uses: pdm-project/setup-pdm@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pdm install --dev
+        working-directory: ./backend
+
+      - name: Run Linting
+        run: pdm lint-ci
+        working-directory: ./backend
+
+      - name: Run Unit Tests
+        run: pdm test-ci
+        working-directory: ./backend
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5.5.2
+        with:
+          files: coverage.xml
+          flags: unittests
+          report_type: coverage
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload test results to Codecov
+        uses: codecov/codecov-action@v5.5.2
+        with:
+          files: junit.xml
+          flags: unittests
+          report_type: test_results
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
   snyk:
     runs-on: ubuntu-latest
     permissions:
