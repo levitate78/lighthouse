@@ -70,7 +70,7 @@
 
 <!-- ── Main content ────────────────────────────────────────────────────── -->
 <main class="main-content">
-  <div class="projects-container">
+  <aside class="sidebar">
     <div class="projects-header">
       <h2>Projects</h2>
       <div class="projects-controls">
@@ -93,10 +93,16 @@
         </button>
       </div>
     </div>
-    <div id="projects-list" class="projects-list">
+    <ul id="project-list" class="project-list">
       <!-- Projects will be rendered here -->
-    </div>
+    </ul>
+  </aside>
+  <div id="main-panel" class="main-panel">
+    <div id="jobs-subtitle"></div>
+    <div id="jobs-body"></div>
+    <!-- Project detail will be rendered here -->
   </div>
+  <div id="group-list"></div>
 </main>
 
 <!-- ── Modals ──────────────────────────────────────────────────────────── -->
@@ -108,6 +114,24 @@
     </div>
     <div id="pipeline-modal-body" class="modal-body">
       <!-- Pipeline details will be rendered here -->
+    </div>
+  </div>
+</div>
+
+<div id="add-group-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Add Group</h3>
+      <button class="modal-close" id="cancel-add-group">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="add-group-form">
+        <label for="group-input">Group ID or Path</label>
+        <input type="text" id="group-input" name="group" placeholder="Enter group ID or path">
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" type="submit" form="add-group-form">Add</button>
     </div>
   </div>
 </div>
@@ -127,21 +151,21 @@
   </div>
 </div>
 
-<div id="token-modal" class="modal">
+<div id="update-token-modal" class="modal">
   <div class="modal-content">
     <div class="modal-header">
       <h3>Update GitLab Token</h3>
-      <button class="modal-close" id="token-modal-close">&times;</button>
+      <button class="modal-close" id="cancel-update-token">&times;</button>
     </div>
     <div class="modal-body">
-      <form id="token-form">
+      <form id="update-token-form">
         <label for="gitlab-token">GitLab Personal Access Token</label>
-        <input type="password" id="gitlab-token" name="token" placeholder="Enter your token">
+        <input type="password" id="token-input" name="token" placeholder="Enter your token">
         <p class="form-help">This token is used to fetch pipeline data from GitLab. It requires 'read_api' and 'read_repository' scopes.</p>
       </form>
     </div>
     <div class="modal-footer">
-      <button class="btn" id="token-save-btn">Save</button>
+      <button class="btn" type="submit" form="update-token-form">Save</button>
     </div>
   </div>
 </div>
@@ -153,7 +177,7 @@
       <button class="modal-close" id="admin-modal-close">&times;</button>
     </div>
     <div id="admin-modal-body" class="modal-body">
-      <!-- Admin content will be rendered here -->
+        <div id="admin-users-list"></div>
     </div>
   </div>
 </div>

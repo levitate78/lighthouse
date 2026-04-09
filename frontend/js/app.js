@@ -17,6 +17,8 @@ import {
   fetchCurrentUser,
 } from './api.js'
 
+import { esc } from './utils.js'
+
 import {
   renderSummary,
   renderSidebar,
