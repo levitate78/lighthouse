@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LIGHTHOUSE</title>
+  <script type="module" crossorigin src="/assets/index.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index.css">
+</head>
+<body>
+
+<!-- ── Top bar ─────────────────────────────────────────────────────────── -->
+<header class="topbar">
+  <div class="topbar-logo">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M12 2L8 6v4H6v2H4v8h2v2h2v-2h8v2h2v-2h2V12h-2V10h-2V6l-4-4z"/>
+      <rect x="10" y="14" width="4" height="6"/>
+      <circle cx="12" cy="18" r="1"/>
+      <path d="M8 10h8M6 12h12"/>
+    </svg>
+    LIGHTHOUSE
+  </div>
+  <div class="topbar-divider"></div>
+  <span class="topbar-meta">last sync: <span id="last-sync">—</span></span>
+  <div class="user-info">
+    <img id="user-avatar" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="Avatar" style="width: 24px; height: 24px; border-radius: 50%; margin-right: 8px;">
+    <span id="user-name"></span>
+    <span id="gitlab-status" class="gitlab-status" title="GitLab token status"></span>
+  </div>
+  <button class="btn" id="update-token-btn" type="button" title="Update GitLab Token">🔑</button>
+  <button class="btn" id="admin-btn" type="button" title="Admin Panel" style="display: none;">👑</button>
+  <button class="btn" id="logout-btn" type="button">Logout</button>
+  <button class="btn" id="sync-btn" type="button">
+    <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+      <polyline points="23 4 23 10 17 10"></polyline>
+      <polyline points="1 20 1 14 7 14"></polyline>
+      <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path>
+    </svg>
+  </button>
+</header>
+
+<!-- ── Summary bar ─────────────────────────────────────────────────────── -->
+<div class="summary-bar">
+  <div class="summary-item">
+    <span class="summary-label">Total Projects</span>
+    <span class="summary-value" id="stat-projects">—</span>
+  </div>
+  <div class="summary-item">
+    <span class="summary-label">Running</span>
+    <span class="summary-value" id="stat-running">—</span>
+  </div>
+  <div class="summary-item">
+    <span class="summary-label">Passed</span>
+    <span class="summary-value" id="stat-success">—</span>
+  </div>
+  <div class="summary-item">
+    <span class="summary-label">Failed</span>
+    <span class="summary-value" id="stat-failed">—</span>
+  </div>
+  <div class="summary-item">
+    <span class="summary-label">Skipped</span>
+    <span class="summary-value" id="stat-pending">—</span>
+  </div>
+  <div class="summary-item">
+    <span class="summary-label">Other</span>
+    <span class="summary-value" id="stat-canceled">—</span>
+  </div>
+</div>
+
+<!-- ── Main content ────────────────────────────────────────────────────── -->
+<main class="main-content">
+  <aside class="sidebar">
+    <div class="projects-header">
+      <h2>Projects</h2>
+      <div class="projects-controls">
+        <button class="btn" id="refresh-btn" type="button">
+          <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path>
+          </svg>
+          Refresh
+        </button>
+        <button class="btn" id="select-groups-btn" type="button">
+          <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2l2 2h4l2-2h2a2 2 0 0 1 2 2v2l-2 2v4l-2 2H9l-2-2V9L3 7z"/>
+            <circle cx="12" cy="12" r="1"/>
+          </svg>
+          Select Groups
+        </button>
+      </div>
+    </div>
+    <ul id="project-list" class="project-list">
+      <!-- Projects will be rendered here -->
+    </ul>
+  </aside>
+  <div id="main-panel" class="main-panel">
+    <div id="jobs-subtitle"></div>
+    <div id="jobs-body"></div>
+    <!-- Project detail will be rendered here -->
+  </div>
+  <div id="group-list"></div>
+</main>
+
+<!-- ── Modals ──────────────────────────────────────────────────────────── -->
+<div id="pipeline-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="pipeline-modal-title">Pipeline Details</h3>
+      <button class="modal-close" type="button" id="pipeline-modal-close">&times;</button>
+    </div>
+    <div id="pipeline-modal-body" class="modal-body">
+      <!-- Pipeline details will be rendered here -->
+    </div>
+  </div>
+</div>
+
+<div id="add-group-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Add Group</h3>
+      <button class="modal-close" type="button" id="cancel-add-group">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="add-group-form">
+        <label for="group-input">Group ID or Path</label>
+        <input type="text" id="group-input" name="group" placeholder="Enter group ID or path">
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" type="submit" form="add-group-form">Add</button>
+    </div>
+  </div>
+</div>
+
+<div id="groups-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Select Groups</h3>
+      <button class="modal-close" type="button" id="groups-modal-close">&times;</button>
+    </div>
+    <div id="groups-modal-body" class="modal-body">
+      <!-- Groups will be rendered here -->
+    </div>
+    <div class="modal-footer">
+      <button class="btn" id="groups-save-btn">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="update-token-modal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Update GitLab Token</h3>
+      <button class="modal-close" type="button" id="cancel-update-token">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="update-token-form">
+        <label for="token-input">GitLab Personal Access Token</label>
+        <input type="password" id="token-input" name="token" placeholder="Enter your token">
+        <p class="form-help">This token is used to fetch pipeline data from GitLab. It requires 'read_api' and 'read_repository' scopes.</p>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" type="submit" form="update-token-form">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="admin-modal" class="modal">
+  <div class="modal-content large-modal">
+    <div class="modal-header">
+      <h3>Admin Panel</h3>
+      <button class="modal-close" type="button" id="cancel-admin">&times;</button>
+    </div>
+    <div id="admin-modal-body" class="modal-body">
+        <div id="admin-users-list"></div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
