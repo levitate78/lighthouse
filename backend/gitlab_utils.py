@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_fernet():
-    key = hashlib.sha256(current_app.config['SECRET_KEY'].encode()).digest()
+    key = hashlib.sha256(current_app.config["SECRET_KEY"].encode()).digest()
     return Fernet(base64.urlsafe_b64encode(key))
 
 

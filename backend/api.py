@@ -4,7 +4,7 @@ from flask import Blueprint, current_app, jsonify, request
 from flask_login import login_required, current_user
 from flask_dance.contrib.gitlab import gitlab as gitlab_dance
 
-from extensions import db
+from extensions import db, limiter
 from gitlab_utils import get_gitlab_client
 from models import User, Project, Pipeline, PipelineJob, UserSelectedGroup
 from sync import sync_pipelines
@@ -120,7 +120,7 @@ def api_add_user_group():
         return jsonify(group_obj.to_dict())
     except gitlab.exceptions.GitlabAuthenticationError:
         current_app.logger.warning(
-            'GitLab authentication failed for user %s',
+            "GitLab authentication failed for user %s",
             current_user.id,
         )
         return jsonify(

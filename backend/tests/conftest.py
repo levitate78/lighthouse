@@ -6,7 +6,8 @@ os.environ.setdefault("GITLAB_URL", "https://gitlab.example.com")
 os.environ.setdefault("FLASK_DEBUG", "false")
 
 import sys
-sys.path.insert(0, '..')
+
+sys.path.insert(0, "..")
 
 import pytest
 

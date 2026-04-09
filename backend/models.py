@@ -37,6 +37,7 @@ class User(UserMixin, db.Model):
     def gitlab_token_decrypted(self):
         if self.gitlab_token:
             from gitlab_utils import decrypt_token
+
             return decrypt_token(self.gitlab_token)
         return None
 
@@ -44,6 +45,7 @@ class User(UserMixin, db.Model):
     def gitlab_token_decrypted(self, value):
         if value:
             from gitlab_utils import encrypt_token
+
             self.gitlab_token = encrypt_token(value)
         else:
             self.gitlab_token = None

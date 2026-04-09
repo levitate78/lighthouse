@@ -23,7 +23,9 @@ def sync_pipelines(group_ids=None):
         gl = get_gitlab_client()
 
         if group_ids is None:
-            selected_groups = db.session.query(UserSelectedGroup.group_id).distinct().all()
+            selected_groups = (
+                db.session.query(UserSelectedGroup.group_id).distinct().all()
+            )
             group_ids = [group_id for (group_id,) in selected_groups]
 
         if not group_ids:

@@ -2,9 +2,6 @@ import { defineConfig } from 'vite'
 import { resolve } from 'path'
 
 export default defineConfig({
-  // Root is the frontend/ directory
-  root: resolve(__dirname),
-
   // Dev server — proxies /api/* back to Flask so you can work against a live
   // backend without CORS issues or changing any fetch URLs in JS.
   server: {
@@ -19,7 +16,7 @@ export default defineConfig({
 
   build: {
     // Output directory relative to project root (frontend/)
-    outDir: resolve(__dirname, '../static/dist'),
+    outDir: 'dist',
 
     // Emit manifest.json so Flask can resolve hashed filenames
     manifest: true,
