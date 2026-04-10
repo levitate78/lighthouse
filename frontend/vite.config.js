@@ -32,10 +32,11 @@ export default defineConfig({
       },
 
       output: {
-        // Predictable chunk naming
-        entryFileNames: 'assets/[name]-[hash].js',
-        chunkFileNames: 'assets/[name]-[hash].js',
-        assetFileNames: 'assets/[name]-[hash][extname]',
+        // Stable filenames avoid backend/frontend asset mismatch when built
+        // in separate containers at different times.
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name][extname]',
       },
     },
   },
