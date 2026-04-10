@@ -6,6 +6,7 @@
  */
 
 import {
+  initCsrf,
   fetchSummary,
   fetchProjects,
   fetchPipelines,
@@ -15,18 +16,13 @@ import {
   addUserGroup,
   removeUserGroup,
   fetchCurrentUser,
+  updateGitlabToken,
+  fetchAdminUsers,
+  approveUser,
+  rejectUser,
 } from './api.js'
 
 import { esc } from './utils.js'
-
-function getCsrfToken() {
-  return document.querySelector('meta[name="csrf-token"]')?.content || ''
-}
-
-function csrfHeaders(headers = {}) {
-  const token = getCsrfToken()
-  return token ? { ...headers, 'X-CSRFToken': token } : headers
-}
 
 import {
   renderSummary,
@@ -48,44 +44,43 @@ import {
 // ── Application state ──────────────────────────────────────────────────────
 
 const state = {
-  /** @type {object|null} Current user */
+  /** @type {object|null} */
   user: null,
-  /** @type {Array} User's selected groups */
+  /** @type {Array} */
   groups: [],
-  /** @type {Array} All projects returned from the API */
+  /** @type {Array} */
   projects: [],
-  /** @type {object|null} Currently selected project */
+  /** @type {object|null} */
   activeProject: null,
-  /** @type {number|null} Currently displayed pipeline's ID */
+  /** @type {number|null} */
   activePipelineId: null,
 }
 
-// ── Group management ──────────────────────────────────────────────────────
+// ── Group management ───────────────────────────────────────────────────────
 
 async function handleRemoveGroup(groupId) {
   try {
-    // Find the group being removed to get its full path
     const removedGroup = state.groups.find(g => g.group_id === groupId)
-    
+
     await removeUserGroup(groupId)
     state.groups = state.groups.filter(g => g.group_id !== groupId)
-    
-    // Remove projects that belong to the removed group
+
     if (removedGroup) {
       state.projects = state.projects.filter(p => p.group_id !== removedGroup.group_id)
-      
-      // If the currently active project was removed, clear the selection
-      if (state.activeProject && state.projects.find(p => p.id === state.activeProject.id) === undefined) {
+
+      if (
+        state.activeProject &&
+        !state.projects.find(p => p.id === state.activeProject.id)
+      ) {
         state.activeProject = null
         state.activePipelineId = null
         renderMainEmpty()
       }
     }
-    
+
     renderGroups(state.groups, handleRemoveGroup)
     renderSidebar(state.projects, state.activeProject?.id, selectProject)
-    
-    // Trigger sync after removing group
+
     setSyncSpinning(true)
     try {
       await triggerSync()
@@ -97,6 +92,7 @@ async function handleRemoveGroup(groupId) {
       setSyncSpinning(false)
     }
   } catch (err) {
+    if (err.message.includes('redirecting')) return
     alert('Failed to remove group: ' + err.message)
   }
 }
@@ -104,20 +100,25 @@ async function handleRemoveGroup(groupId) {
 // ── Boot ───────────────────────────────────────────────────────────────────
 
 async function boot() {
-  // Load user info
+  // Fetch and cache the CSRF token before any mutating requests are made.
+  // This handles both development (meta tag) and production (endpoint) modes.
+  await initCsrf()
+
+  // Load user info — a 401 here means the session is invalid; api.js will
+  // redirect to /login automatically.
   try {
-    const user = await fetchCurrentUser()
+    state.user = await fetchCurrentUser()
     renderUserInfo({
-      name: user.name,
-      avatar: user.avatar_url,
-      has_gitlab_token: user.has_gitlab_token,
+      name: state.user.name,
+      avatar: state.user.avatar_url,
+      has_gitlab_token: state.user.has_gitlab_token,
     })
-    
-    // Show admin button for admin user
-    if (user.username === 'admin') {
+
+    if (state.user.is_admin) {
       document.getElementById('admin-btn').style.display = 'inline-block'
     }
   } catch (err) {
+    if (err.message.includes('redirecting')) return
     console.error('Failed to load user:', err)
   }
 
@@ -135,64 +136,55 @@ async function boot() {
   // Auto-refresh every 30 s
   setInterval(refreshAll, 30_000)
 
-  // Search input
+  // ── Event listeners ──────────────────────────────────────────────────────
+
   document.getElementById('search-input')
     ?.addEventListener('input', e => filterProjects(e.target.value))
 
-  // Manual sync button
   document.getElementById('sync-btn')
     ?.addEventListener('click', handleSync)
 
-  // Logout button
   document.getElementById('logout-btn')
-    ?.addEventListener('click', () => window.location.href = '/logout')
+    ?.addEventListener('click', () => { window.location.href = '/logout' })
 
-  // Add group button
   document.getElementById('add-group-btn')
     ?.addEventListener('click', () => {
-      document.getElementById('add-group-modal').style.display = 'flex';
-    });
+      document.getElementById('add-group-modal').style.display = 'flex'
+    })
 
-  // Cancel add group
   document.getElementById('cancel-add-group')
     ?.addEventListener('click', () => {
-      document.getElementById('add-group-modal').style.display = 'none';
-      document.getElementById('add-group-form').reset();
-    });
+      document.getElementById('add-group-modal').style.display = 'none'
+      document.getElementById('add-group-form').reset()
+    })
 
-  // Add group form
   document.getElementById('add-group-form')
-    ?.addEventListener('submit', handleAddGroupForm);
+    ?.addEventListener('submit', handleAddGroupForm)
 
-  // Update token button
   document.getElementById('update-token-btn')
     ?.addEventListener('click', () => {
-      document.getElementById('update-token-modal').style.display = 'flex';
-    });
+      document.getElementById('update-token-modal').style.display = 'flex'
+    })
 
-  // Cancel update token
   document.getElementById('cancel-update-token')
     ?.addEventListener('click', () => {
-      document.getElementById('update-token-modal').style.display = 'none';
-      document.getElementById('update-token-form').reset();
-    });
+      document.getElementById('update-token-modal').style.display = 'none'
+      document.getElementById('update-token-form').reset()
+    })
 
-  // Update token form
   document.getElementById('update-token-form')
-    ?.addEventListener('submit', handleUpdateTokenForm);
+    ?.addEventListener('submit', handleUpdateTokenForm)
 
-  // Admin button
   document.getElementById('admin-btn')
     ?.addEventListener('click', () => {
-      document.getElementById('admin-modal').style.display = 'flex';
-      loadAdminUsers();
-    });
+      document.getElementById('admin-modal').style.display = 'flex'
+      loadAdminUsers()
+    })
 
-  // Cancel admin
   document.getElementById('cancel-admin')
     ?.addEventListener('click', () => {
-      document.getElementById('admin-modal').style.display = 'none';
-    });
+      document.getElementById('admin-modal').style.display = 'none'
+    })
 }
 
 // ── Data loading ───────────────────────────────────────────────────────────
@@ -228,7 +220,6 @@ async function refreshProjects() {
 function selectProject(project) {
   state.activeProject = project
   state.activePipelineId = null
-  // Re-render sidebar to move the active highlight
   renderSidebar(state.projects, project.id, selectProject)
   loadProjectDetail(project.id)
 }
@@ -248,17 +239,16 @@ async function loadProjectDetail(projectId) {
     )
 
     if (autoLoadPipelineId) {
-      const firstRow = document.querySelector(`[data-pipeline-id="${autoLoadPipelineId}"]`)
-      await selectPipeline(autoLoadPipelineId, firstRow)
+      await selectPipeline(autoLoadPipelineId)
     }
   } catch (err) {
-    renderMainError(err.message)
+    if (!err.message.includes('redirecting')) renderMainError(err.message)
   }
 }
 
 // ── Pipeline / jobs selection ──────────────────────────────────────────────
 
-async function selectPipeline(pipelineId, rowEl) {
+async function selectPipeline(pipelineId) {
   state.activePipelineId = pipelineId
   setActivePipelineRow(pipelineId)
   renderJobsLoading(pipelineId)
@@ -266,7 +256,7 @@ async function selectPipeline(pipelineId, rowEl) {
     const jobs = await fetchJobs(pipelineId)
     renderJobs(jobs)
   } catch (err) {
-    renderJobsError(err.message)
+    if (!err.message.includes('redirecting')) renderJobsError(err.message)
   }
 }
 
@@ -293,145 +283,127 @@ async function handleSync() {
     await refreshAll()
     setLastSync(new Date().toLocaleTimeString())
   } catch (err) {
-    console.error('[sync]', err)
+    if (!err.message.includes('redirecting')) console.error('[sync]', err)
   } finally {
     setSyncSpinning(false)
   }
 }
 
-async function handleAddGroupForm(e) {
-  e.preventDefault();
-  const groupInput = document.getElementById('group-input').value.trim();
-  if (!groupInput) return;
+// ── Add group form ─────────────────────────────────────────────────────────
 
-  // Determine if it's an ID or path
-  const isId = /^\d+$/.test(groupInput);
-  const groupData = isId ? { group_id: parseInt(groupInput) } : { group_path: groupInput };
+async function handleAddGroupForm(e) {
+  e.preventDefault()
+  const groupInput = document.getElementById('group-input').value.trim()
+  if (!groupInput) return
+
+  const isId = /^\d+$/.test(groupInput)
+  const groupData = isId
+    ? { group_id: parseInt(groupInput, 10) }
+    : { group_path: groupInput }
 
   try {
-    const newGroup = await addUserGroup(groupData);
-    state.groups.push(newGroup);
-    renderGroups(state.groups, handleRemoveGroup);
-    
-    // Close modal immediately after adding group
-    document.getElementById('add-group-modal').style.display = 'none';
-    document.getElementById('add-group-form').reset();
-    
-    // Trigger sync with visual feedback
-    setSyncSpinning(true);
+    const newGroup = await addUserGroup(groupData)
+    state.groups.push(newGroup)
+    renderGroups(state.groups, handleRemoveGroup)
+
+    document.getElementById('add-group-modal').style.display = 'none'
+    document.getElementById('add-group-form').reset()
+
+    setSyncSpinning(true)
     try {
-      await triggerSync();
-      await refreshAll();
-      setLastSync(new Date().toLocaleTimeString());
+      await triggerSync()
+      await refreshAll()
+      setLastSync(new Date().toLocaleTimeString())
     } catch (syncErr) {
-      console.error('[sync after add group]', syncErr);
+      console.error('[sync after add group]', syncErr)
     } finally {
-      setSyncSpinning(false);
+      setSyncSpinning(false)
     }
   } catch (err) {
-    alert('Failed to add group: ' + err.message);
+    if (!err.message.includes('redirecting')) alert('Failed to add group: ' + err.message)
   }
 }
+
+// ── Update token form ──────────────────────────────────────────────────────
 
 async function handleUpdateTokenForm(e) {
-  e.preventDefault();
-  const tokenInput = document.getElementById('token-input').value.trim();
-  if (!tokenInput) return;
+  e.preventDefault()
+  const tokenInput = document.getElementById('token-input').value.trim()
+  if (!tokenInput) return
 
   try {
-    const response = await fetch('/api/user/gitlab-token', {
-      method: 'POST',
-      headers: csrfHeaders({
-        'Content-Type': 'application/json',
-      }),
-      body: JSON.stringify({ token: tokenInput }),
-    });
+    await updateGitlabToken(tokenInput)
+    alert('GitLab token updated successfully!')
 
-    const data = await response.json();
+    const user = await fetchCurrentUser()
+    renderUserInfo({
+      name: user.name,
+      avatar: user.avatar_url,
+      has_gitlab_token: user.has_gitlab_token,
+    })
 
-    if (response.ok) {
-      alert('GitLab token updated successfully!');
-      // Refresh user info to update the status indicator
-      const user = await fetchCurrentUser();
-      renderUserInfo({
-        name: user.name,
-        avatar: user.avatar_url,
-        has_gitlab_token: user.has_gitlab_token,
-      });
-      
-      // Close modal
-      document.getElementById('update-token-modal').style.display = 'none';
-      document.getElementById('update-token-form').reset();
-    } else {
-      alert('Failed to update token: ' + (data.error || 'Unknown error'));
-    }
+    document.getElementById('update-token-modal').style.display = 'none'
+    document.getElementById('update-token-form').reset()
   } catch (err) {
-    alert('Failed to update token: ' + err.message);
+    if (!err.message.includes('redirecting')) alert('Failed to update token: ' + err.message)
   }
 }
 
-// ── Admin functions ────────────────────────────────────────────────────────
+// ── Admin panel ────────────────────────────────────────────────────────────
 
 async function loadAdminUsers() {
   try {
-    const response = await fetch('/api/admin/users')
-    if (!response.ok) throw new Error('Failed to load users')
-    const users = await response.json()
-    
+    const users = await fetchAdminUsers()
     const usersList = document.getElementById('admin-users-list')
     usersList.innerHTML = ''
-    
+
     for (const user of users) {
       const userDiv = document.createElement('div')
       userDiv.className = 'admin-user-item'
       userDiv.innerHTML = `
         <div class="user-info">
           <strong>${esc(user.name)}</strong> (${esc(user.username)})
-          <br><small>${esc(user.email)} • ${user.provider} • ${user.approved ? 'Approved' : 'Pending'}</small>
+          <br><small>${esc(user.email)} · ${esc(user.provider)} · ${user.approved ? 'Approved' : 'Pending'}</small>
         </div>
         <div class="user-actions">
-          ${!user.approved ? `<button class="btn-small" onclick="approveUser(${user.id})">Approve</button>` : ''}
-          ${user.username !== 'admin' ? `<button class="btn-small btn-danger" onclick="rejectUser(${user.id})">Reject</button>` : ''}
-        </div>
-      `
+          ${!user.approved
+            ? `<button class="btn-small" data-action="approve" data-id="${user.id}">Approve</button>`
+            : ''}
+          ${user.username !== 'admin'
+            ? `<button class="btn-small btn-danger" data-action="reject" data-id="${user.id}">Reject</button>`
+            : ''}
+        </div>`
       usersList.appendChild(userDiv)
     }
+
+    // Use event delegation instead of inline onclick handlers to avoid XSS.
+    usersList.addEventListener('click', async e => {
+      const btn = e.target.closest('[data-action]')
+      if (!btn) return
+      const { action, id } = btn.dataset
+      const userId = parseInt(id, 10)
+
+      if (action === 'approve') {
+        try {
+          await approveUser(userId)
+          loadAdminUsers()
+        } catch (err) {
+          alert('Failed to approve user: ' + err.message)
+        }
+      } else if (action === 'reject') {
+        if (!confirm('Reject and permanently delete this user?')) return
+        try {
+          await rejectUser(userId)
+          loadAdminUsers()
+        } catch (err) {
+          alert('Failed to reject user: ' + err.message)
+        }
+      }
+    }, { once: true })
   } catch (err) {
     alert('Failed to load users: ' + err.message)
   }
 }
-
-async function approveUser(userId) {
-  try {
-    const response = await fetch(`/api/admin/users/${userId}/approve`, {
-      method: 'POST',
-      headers: csrfHeaders(),
-    })
-    if (!response.ok) throw new Error('Failed to approve user')
-    loadAdminUsers() // Refresh the list
-  } catch (err) {
-    alert('Failed to approve user: ' + err.message)
-  }
-}
-
-async function rejectUser(userId) {
-  if (!confirm('Are you sure you want to reject and delete this user?')) return
-  
-  try {
-    const response = await fetch(`/api/admin/users/${userId}/reject`, {
-      method: 'POST',
-      headers: csrfHeaders(),
-    })
-    if (!response.ok) throw new Error('Failed to reject user')
-    loadAdminUsers() // Refresh the list
-  } catch (err) {
-    alert('Failed to reject user: ' + err.message)
-  }
-}
-
-// Make functions global for onclick handlers
-window.approveUser = approveUser
-window.rejectUser = rejectUser
 
 // ── Start ──────────────────────────────────────────────────────────────────
 

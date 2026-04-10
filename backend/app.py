@@ -8,7 +8,7 @@ import logging
 import secrets
 from datetime import datetime, timezone
 
-from flask import Flask, render_template
+from flask import Flask, render_template, jsonify
 from flask_login import login_required
 from flask_dance.contrib.gitlab import make_gitlab_blueprint
 from flask_wtf import CSRFProtect
@@ -32,9 +32,7 @@ def create_app():
     scheduler.init_app(app)
     login_manager.init_app(app)
     limiter.init_app(app)
-    cors.init_app(
-        app, resources={r"/api/*": {"origins": "*"}}
-    )  # Restrict in production
+    cors.init_app(app, resources={r"/api/*": {"origins": "*"}})
     csrf = CSRFProtect(app)  # noqa: F841
     login_manager.login_view = "auth.login"
     login_manager.user_loader(load_user)
@@ -50,7 +48,7 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(api_bp)
 
-    # Security headers
+    # ── Security headers ───────────────────────────────────────────────────
     @app.after_request
     def add_security_headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -59,11 +57,17 @@ def create_app():
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         return response
 
+    # ── Main SPA route ─────────────────────────────────────────────────────
+    # In development Flask renders the Jinja2 template which injects Vite
+    # asset URLs and the CSRF token meta tag.
+    # In production the pre-built SPA is served directly by nginx; the SPA
+    # fetches /api/csrf-token on boot instead.
     @app.route("/")
     @login_required
     def index():
         return render_template("index.html")
 
+    # ── Vite asset helpers ─────────────────────────────────────────────────
     def _load_vite_manifest() -> dict:
         manifest_path = os.path.join(
             app.static_folder, "dist", ".vite", "manifest.json"
@@ -103,31 +107,15 @@ def create_app():
 
         return dict(vite_asset=vite_asset, vite_css=vite_css, vite_dev=vite_dev)
 
+    # ── Database initialisation ────────────────────────────────────────────
+    # db.create_all() is intentionally NOT called here; use:
+    #   - `alembic upgrade head`  in production / Docker (run by entrypoint.sh)
+    #   - `flask init-db`         for local development without Docker
+    #   - conftest.py             calls db.create_all() directly for tests
     with app.app_context():
-        db.create_all()
+        _seed_admin_user(app)
 
-        if not User.query.first():
-            admin_password = secrets.token_urlsafe(16)
-            admin_user = User(
-                username="admin",
-                name="Administrator",
-                email="admin@localhost",
-                password_hash=generate_password_hash(admin_password),
-                provider="local",
-                password_change_required=True,
-                approved=True,  # Admin is automatically approved
-                is_admin=True,
-            )
-            db.session.add(admin_user)
-            db.session.commit()
-            app.logger.warning(
-                'Admin user created with username "admin" and password: %s. '
-                "Please change this password after first login.",
-                admin_password,
-            )
-            print(f"Admin user created with password: {admin_password}")
-            print("Please change the password after first login.")
-
+    # ── Background scheduler ───────────────────────────────────────────────
     scheduler.add_job(
         id="sync_pipelines",
         func="sync:sync_pipelines_background",
@@ -140,7 +128,52 @@ def create_app():
     return app
 
 
+def _seed_admin_user(app: Flask) -> None:
+    """Create a default admin account if no users exist yet."""
+    try:
+        if not User.query.first():
+            admin_password = secrets.token_urlsafe(16)
+            admin_user = User(
+                username="admin",
+                name="Administrator",
+                email="admin@localhost",
+                password_hash=generate_password_hash(admin_password),
+                provider="local",
+                password_change_required=True,
+                approved=True,
+                is_admin=True,
+            )
+            db.session.add(admin_user)
+            db.session.commit()
+            app.logger.warning(
+                'Admin user created with username "admin" and password: %s. '
+                "Please change this password after first login.",
+                admin_password,
+            )
+            print(f"\nAdmin user created with password: {admin_password}")
+            print("Please change the password after first login.\n")
+    except Exception:
+        # Tables may not exist yet (first run before migrations).
+        # The entrypoint will run alembic upgrade head before starting gunicorn,
+        # so this is a no-op during container startup sequencing.
+        db.session.rollback()
+
+
+# ── CLI helpers ────────────────────────────────────────────────────────────
+
 app = create_app()
+
+
+@app.cli.command("init-db")
+def init_db_command():
+    """Initialise the database for local development (non-Docker).
+
+    For production use `alembic upgrade head` instead.
+    """
+    db.create_all()
+    _seed_admin_user(app)
+    print("Database tables created.")
+
 
 if __name__ == "__main__":
     debug = app.config.get("DEBUG", False)
