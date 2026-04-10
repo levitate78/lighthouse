@@ -18,25 +18,8 @@ module.exports = {
       },
     ],
 
-    // Write/update CHANGELOG.md
-    [
-      "@semantic-release/changelog",
-      {
-        changelogFile: "CHANGELOG.md",
-      },
-    ],
-
     // Create GitHub release
     "@semantic-release/github",
 
-    // Commit CHANGELOG.md back to the repository
-    [
-      "@semantic-release/git",
-      {
-        assets: ["CHANGELOG.md"],
-        message:
-          "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}",
-      },
-    ],
   ],
 };
