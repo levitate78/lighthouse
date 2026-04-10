@@ -3,6 +3,7 @@ LIGHTHOUSE — Flask Application
 """
 
 import os
+import fcntl
 import logging
 import secrets
 from datetime import datetime, timezone
@@ -18,6 +19,47 @@ from extensions import db, scheduler, login_manager, limiter, cors
 from auth import auth_bp, load_user
 from api import api_bp
 from models import User
+
+
+_scheduler_lock_fd = None
+
+
+def _acquire_scheduler_lock() -> bool:
+    """Acquire a non-blocking file lock so only one process runs the scheduler."""
+    global _scheduler_lock_fd
+
+    if _scheduler_lock_fd is not None:
+        return True
+
+    lock_path = os.environ.get("SCHEDULER_LOCK_FILE", "/tmp/lighthouse_scheduler.lock")
+    lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(lock_fd)
+        return False
+
+    _scheduler_lock_fd = lock_fd
+    return True
+
+
+def _should_start_scheduler() -> bool:
+    """Return True only for the designated process that should run APScheduler."""
+    scheduler_enabled = os.environ.get("SCHEDULER_ENABLED") == "1"
+    is_werkzeug_main = os.environ.get("WERKZEUG_RUN_MAIN") == "true"
+    is_flask_cli_command = (
+        os.environ.get("FLASK_RUN_FROM_CLI") == "true" and not is_werkzeug_main
+    )
+
+    if is_flask_cli_command:
+        return False
+
+    should_run = scheduler_enabled or is_werkzeug_main
+    if not should_run:
+        return False
+
+    return _acquire_scheduler_lock()
 
 
 def create_app():
@@ -114,7 +156,8 @@ def create_app():
             next_run_time=datetime.now(timezone.utc),
             replace_existing=True,
         )
-        scheduler.start()
+        if _should_start_scheduler():
+            scheduler.start()
 
     return app
 

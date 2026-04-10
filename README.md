@@ -132,6 +132,8 @@ filenames into `templates/index.html` at request time.
 | `SYNC_INTERVAL_SECONDS` | GitLab poll interval                             | `60`                            |
 | `VITE_DEV_SERVER`       | Vite dev server URL (dev only, blank in prod)    | *(blank)*                       |
 | `SECRET_KEY`            | Flask secret key                                 | *(change in production)*        |
+| `SCHEDULER_ENABLED`     | Enable scheduler startup (`1`) for scheduler-capable processes | `0`                             |
+| `SCHEDULER_LOCK_FILE`   | File path used for inter-process scheduler lock    | `/tmp/lighthouse_scheduler.lock`|
 
 ---
 
@@ -151,8 +153,12 @@ filenames into `templates/index.html` at request time.
 
 - **PostgreSQL**: set `DATABASE_URL` to `postgresql+psycopg2://user:pass@host/db`
   and uncomment `psycopg2-binary` in `requirements.txt`
-- **Gunicorn**: use `-w 2` max to avoid duplicate APScheduler instances, or
-  replace APScheduler with a dedicated Celery + Redis worker
+- **Gunicorn / scheduler**: set `SCHEDULER_ENABLED=1` on exactly one process
+  (or one dedicated dyno/pod) so only scheduler-capable processes attempt
+  startup. A file lock (`SCHEDULER_LOCK_FILE`) ensures only one process actually
+  starts `sync_pipelines` even with multiple Gunicorn workers. Flask debug/CLI
+  parent processes are ignored unless the Werkzeug reloader child is active
+  (`WERKZEUG_RUN_MAIN=true`).
 - **Static files**: point Nginx at `static/dist/` so it serves assets directly —
   Flask doesn't need to be in that path at all
 - **Cache headers**: Vite's hashed filenames are safe to cache forever with
