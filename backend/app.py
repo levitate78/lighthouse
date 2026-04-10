@@ -3,7 +3,6 @@ LIGHTHOUSE — Flask Application
 """
 
 import os
-import json
 import logging
 import secrets
 from datetime import datetime, timezone
@@ -29,7 +28,9 @@ def create_app():
     logging.basicConfig(level=logging.INFO)
 
     db.init_app(app)
-    scheduler.init_app(app)
+    scheduler_was_running = scheduler.running
+    if not scheduler_was_running:
+        scheduler.init_app(app)
     login_manager.init_app(app)
     limiter.init_app(app)
     cors.init_app(app, resources={r"/api/*": {"origins": "*"}})
@@ -68,42 +69,30 @@ def create_app():
         return render_template("index.html")
 
     # ── Vite asset helpers ─────────────────────────────────────────────────
-    def _load_vite_manifest() -> dict:
-        manifest_path = os.path.join(
-            app.static_folder, "dist", ".vite", "manifest.json"
-        )
-        if not os.path.exists(manifest_path):
-            manifest_path = os.path.join(app.static_folder, "dist", "manifest.json")
-        try:
-            with open(manifest_path) as f:
-                return json.load(f)
-        except FileNotFoundError:
-            app.logger.warning(
-                "Vite manifest not found — run `npm run build` inside frontend/"
-            )
-            return {}
-
     @app.context_processor
     def vite_assets():
         vite_dev = app.config.get("VITE_DEV_SERVER", "")
+        entry_to_asset = {
+            "js/main.js": "assets/main.js",
+            "js/auth.js": "assets/auth.js",
+        }
+        entry_to_css = {
+            "js/main.js": "assets/main.css",
+            "js/auth.js": "assets/auth.css",
+        }
 
         def vite_asset(name: str) -> str:
             if vite_dev:
                 return f"{vite_dev.rstrip('/')}/{name}"
-            manifest = _load_vite_manifest()
-            entry = manifest.get(name, {})
-            file_path = entry.get("file", name)
-            return f"/static/dist/{file_path}"
+            return f"/static/dist/{entry_to_asset.get(name, name)}"
 
         def vite_css(name: str) -> str:
             if vite_dev:
                 return ""
-            manifest = _load_vite_manifest()
-            css_files = manifest.get(name, {}).get("css", [])
-            return "\n".join(
-                f'<link rel="stylesheet" href="/static/dist/{css}">'
-                for css in css_files
-            )
+            css_file = entry_to_css.get(name)
+            if not css_file:
+                return ""
+            return f'<link rel="stylesheet" href="/static/dist/{css_file}">'
 
         return dict(vite_asset=vite_asset, vite_css=vite_css, vite_dev=vite_dev)
 
@@ -116,14 +105,16 @@ def create_app():
         _seed_admin_user(app)
 
     # ── Background scheduler ───────────────────────────────────────────────
-    scheduler.add_job(
-        id="sync_pipelines",
-        func="sync:sync_pipelines_background",
-        trigger="interval",
-        seconds=app.config.get("SYNC_INTERVAL_SECONDS", 60),
-        next_run_time=datetime.now(timezone.utc),
-    )
-    scheduler.start()
+    if not scheduler_was_running:
+        scheduler.add_job(
+            id="sync_pipelines",
+            func="sync:sync_pipelines_background",
+            trigger="interval",
+            seconds=app.config.get("SYNC_INTERVAL_SECONDS", 60),
+            next_run_time=datetime.now(timezone.utc),
+            replace_existing=True,
+        )
+        scheduler.start()
 
     return app
 
