@@ -119,7 +119,10 @@ def _seed_admin_user(app: Flask) -> None:
     """Create a default admin account if no users exist yet."""
     try:
         if not User.query.first():
-            admin_password = secrets.token_urlsafe(16)
+            admin_password = os.getenv("FIRST_ADMIN_PASSWORD")
+            if not admin_password:
+                raise KeyError(
+                    "Environment variable FIRST_ADMIN_PASSWORD must be set to create the initial admin user.")
             admin_user = User(
                 username="admin",
                 name="Administrator",
@@ -137,7 +140,7 @@ def _seed_admin_user(app: Flask) -> None:
                 "Please change this password after first login.",
                 admin_password,
             )
-            print(f"\nAdmin user created with password: {admin_password}")
+            print("\nAdmin user created with specified password.")
             print("Please change the password after first login.\n")
     except Exception:
         # Tables may not exist yet (first run before migrations).

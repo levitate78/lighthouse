@@ -182,7 +182,7 @@ def sync_pipelines(group_ids=None, background=False):
                     db.session.rollback()
                     logger.warning("Failed to sync group %s: %s", group_id, exc)
                     results["failures"].append(
-                        {"group_id": group_id, "error": str(exc)}
+                        {"group_id": group_id, "error": f"Failed to sync group: {group_id}"}
                     )
             if results["failures"]:
                 results["success"] = False
@@ -190,7 +190,7 @@ def sync_pipelines(group_ids=None, background=False):
             db.session.rollback()
             logger.error("Sync failed: %s", exc)
             results["success"] = False
-            results["failures"].append({"error": str(exc)})
+            results["failures"].append({"error": "Sync operation failed."})
 
     if background and results["success"]:
         _start_background_sync(group_ids)
