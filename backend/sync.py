@@ -92,7 +92,7 @@ def _background_sync_older_pipelines(group_ids):
                     page = 2
                     while True:
                         pipelines = gl.projects.get(proj_data["id"]).pipelines.list(
-                            per_page=10, page=page
+                            per_page=10, page=page, get_all=False
                         )
                         if not pipelines:
                             break
@@ -164,7 +164,7 @@ def sync_pipelines(group_ids=None, background=False):
                         db.session.flush()
 
                         pipelines = gl.projects.get(proj_data["id"]).pipelines.list(
-                            per_page=10
+                            per_page=10, get_all=False
                         )
                         recent_pipeline_id = pipelines[0].id if pipelines else None
 

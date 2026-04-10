@@ -28,7 +28,9 @@ def create_app():
     logging.basicConfig(level=logging.INFO)
 
     db.init_app(app)
-    scheduler.init_app(app)
+    scheduler_was_running = scheduler.running
+    if not scheduler_was_running:
+        scheduler.init_app(app)
     login_manager.init_app(app)
     limiter.init_app(app)
     cors.init_app(app, resources={r"/api/*": {"origins": "*"}})
@@ -103,14 +105,16 @@ def create_app():
         _seed_admin_user(app)
 
     # ── Background scheduler ───────────────────────────────────────────────
-    scheduler.add_job(
-        id="sync_pipelines",
-        func="sync:sync_pipelines_background",
-        trigger="interval",
-        seconds=app.config.get("SYNC_INTERVAL_SECONDS", 60),
-        next_run_time=datetime.now(timezone.utc),
-    )
-    scheduler.start()
+    if not scheduler_was_running:
+        scheduler.add_job(
+            id="sync_pipelines",
+            func="sync:sync_pipelines_background",
+            trigger="interval",
+            seconds=app.config.get("SYNC_INTERVAL_SECONDS", 60),
+            next_run_time=datetime.now(timezone.utc),
+            replace_existing=True,
+        )
+        scheduler.start()
 
     return app
 

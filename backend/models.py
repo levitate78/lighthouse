@@ -17,7 +17,7 @@ class User(UserMixin, db.Model):
     __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
-    gitlab_id = db.Column(db.Integer, unique=True, nullable=True)
+    gitlab_id = db.Column(db.BigInteger, unique=True, nullable=True)
     username = db.Column(db.String(255), unique=True, nullable=False)
     name = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(255), nullable=False)
@@ -72,7 +72,7 @@ class UserSelectedGroup(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    group_id = db.Column(db.Integer, nullable=False)
+    group_id = db.Column(db.BigInteger, nullable=False)
     group_name = db.Column(db.String(255), nullable=False)
     group_full_path = db.Column(db.String(512), nullable=False)
 
@@ -91,8 +91,8 @@ class Project(db.Model):
     __tablename__ = "projects"
     __table_args__ = (db.Index("ix_projects_group_id", "group_id"),)
 
-    id = db.Column(db.Integer, primary_key=True)
-    group_id = db.Column(db.Integer, nullable=True)
+    id = db.Column(db.BigInteger, primary_key=True)
+    group_id = db.Column(db.BigInteger, nullable=True)
     name = db.Column(db.String(255), nullable=False)
     namespace = db.Column(db.String(512), default="")
     web_url = db.Column(db.String(1024), default="")
@@ -142,8 +142,10 @@ class Project(db.Model):
 class Pipeline(db.Model):
     __tablename__ = "pipelines"
 
-    id = db.Column(db.Integer, primary_key=True)
-    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=False)
+    id = db.Column(db.BigInteger, primary_key=True)
+    project_id = db.Column(
+        db.BigInteger, db.ForeignKey("projects.id"), nullable=False
+    )
     ref = db.Column(db.String(512), default="")
     sha = db.Column(db.String(64), default="")
     status = db.Column(db.String(64), default="unknown")
@@ -182,8 +184,10 @@ class Pipeline(db.Model):
 class PipelineJob(db.Model):
     __tablename__ = "pipeline_jobs"
 
-    id = db.Column(db.Integer, primary_key=True)
-    pipeline_id = db.Column(db.Integer, db.ForeignKey("pipelines.id"), nullable=False)
+    id = db.Column(db.BigInteger, primary_key=True)
+    pipeline_id = db.Column(
+        db.BigInteger, db.ForeignKey("pipelines.id"), nullable=False
+    )
     name = db.Column(db.String(255), default="")
     stage = db.Column(db.String(255), default="")
     status = db.Column(db.String(64), default="unknown")
