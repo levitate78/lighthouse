@@ -5,6 +5,7 @@ Revises:
 Create Date: 2026-04-10 00:00:00.000000
 
 """
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -89,7 +90,9 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_pipelines_project_id", "pipelines", ["project_id"], unique=False)
+    op.create_index(
+        "ix_pipelines_project_id", "pipelines", ["project_id"], unique=False
+    )
     op.create_index(
         "ix_pipelines_project_created",
         "pipelines",

@@ -3,7 +3,6 @@ Database models for LIGHTHOUSE.
 """
 
 from datetime import datetime, timezone, MINYEAR
-from zoneinfo import ZoneInfo
 
 from extensions import db
 from flask_login import UserMixin
@@ -40,6 +39,7 @@ class User(UserMixin, db.Model):
     def gitlab_token_decrypted(self):
         if self.gitlab_token:
             from gitlab_utils import decrypt_token
+
             return decrypt_token(self.gitlab_token)
         return None
 
@@ -47,6 +47,7 @@ class User(UserMixin, db.Model):
     def gitlab_token_decrypted(self, value):
         if value:
             from gitlab_utils import encrypt_token
+
             self.gitlab_token = encrypt_token(value)
         else:
             self.gitlab_token = None
@@ -143,9 +144,7 @@ class Pipeline(db.Model):
     __tablename__ = "pipelines"
 
     id = db.Column(db.BigInteger, primary_key=True)
-    project_id = db.Column(
-        db.BigInteger, db.ForeignKey("projects.id"), nullable=False
-    )
+    project_id = db.Column(db.BigInteger, db.ForeignKey("projects.id"), nullable=False)
     ref = db.Column(db.String(512), default="")
     sha = db.Column(db.String(64), default="")
     status = db.Column(db.String(64), default="unknown")

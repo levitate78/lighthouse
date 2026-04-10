@@ -17,6 +17,7 @@ api_bp = Blueprint("api", __name__)
 
 # ── Health check (unauthenticated) ─────────────────────────────────────────
 
+
 @api_bp.route("/api/health")
 def api_health():
     """Liveness probe used by Docker healthchecks and load-balancers."""
@@ -27,6 +28,7 @@ def api_health():
 # The SPA fetches this on boot so mutating requests can include the
 # X-CSRFToken header regardless of whether Flask rendered the page
 # (development) or nginx served a pre-built static bundle (production).
+
 
 @api_bp.route("/api/csrf-token")
 def api_csrf_token():
@@ -45,6 +47,7 @@ def api_csrf_token():
 
 # ── Current user ───────────────────────────────────────────────────────────
 
+
 @api_bp.route("/api/user/current")
 @login_required
 def api_current_user():
@@ -52,6 +55,7 @@ def api_current_user():
 
 
 # ── GitLab token management ────────────────────────────────────────────────
+
 
 @api_bp.route("/api/user/gitlab-token", methods=["POST"])
 @login_required
@@ -87,6 +91,7 @@ def api_update_gitlab_token():
 
 
 # ── Group management ───────────────────────────────────────────────────────
+
 
 @api_bp.route("/api/user/groups", methods=["GET"])
 @login_required
@@ -202,6 +207,7 @@ def api_remove_user_group(group_id):
 
 # ── Authorisation helpers ──────────────────────────────────────────────────
 
+
 def _get_authorized_project_group_ids():
     group_ids = [group.group_id for group in current_user.selected_groups]
     return [gid for gid in group_ids if gid is not None]
@@ -218,6 +224,7 @@ def admin_required(view_func):
 
 
 # ── Projects ───────────────────────────────────────────────────────────────
+
 
 @api_bp.route("/api/projects")
 @login_required
@@ -254,6 +261,7 @@ def api_projects():
 
 # ── Pipelines ──────────────────────────────────────────────────────────────
 
+
 @api_bp.route("/api/projects/<int:project_id>/pipelines")
 @login_required
 def api_pipelines(project_id):
@@ -285,6 +293,7 @@ def api_pipelines(project_id):
 
 # ── Jobs ───────────────────────────────────────────────────────────────────
 
+
 @api_bp.route("/api/pipelines/<int:pipeline_id>/jobs")
 @login_required
 def api_jobs(pipeline_id):
@@ -308,6 +317,7 @@ def api_jobs(pipeline_id):
 
 
 # ── Summary ────────────────────────────────────────────────────────────────
+
 
 @api_bp.route("/api/summary")
 @login_required
@@ -360,6 +370,7 @@ def api_summary():
 
 # ── Sync ───────────────────────────────────────────────────────────────────
 
+
 @api_bp.route("/api/sync", methods=["POST"])
 @login_required
 @limiter.limit("1 per minute")
@@ -382,6 +393,7 @@ def api_sync():
 
 
 # ── Admin ──────────────────────────────────────────────────────────────────
+
 
 @api_bp.route("/api/admin/users")
 @login_required

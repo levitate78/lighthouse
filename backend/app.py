@@ -5,10 +5,9 @@ LIGHTHOUSE — Flask Application
 import os
 import fcntl
 import logging
-import secrets
 from datetime import datetime, timezone
 
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template
 from flask_login import login_required
 from flask_dance.contrib.gitlab import make_gitlab_blueprint
 from flask_wtf import CSRFProtect
@@ -169,7 +168,8 @@ def _seed_admin_user(app: Flask) -> None:
             admin_password = os.getenv("FIRST_ADMIN_PASSWORD")
             if not admin_password:
                 raise KeyError(
-                    "Environment variable FIRST_ADMIN_PASSWORD must be set to create the initial admin user.")
+                    "Environment variable FIRST_ADMIN_PASSWORD must be set to create the initial admin user."
+                )
             admin_user = User(
                 username="admin",
                 name="Administrator",
