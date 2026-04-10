@@ -2,34 +2,35 @@
 Database models for LIGHTHOUSE.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, MINYEAR
 
 from extensions import db
 from flask_login import UserMixin
+
+# Sentinel for sorting when created_at is NULL — must be timezone-aware so
+# it is comparable with other timezone-aware datetimes.
+_EPOCH = datetime(MINYEAR, 1, 1, tzinfo=timezone.utc)
 
 
 class User(UserMixin, db.Model):
     __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
-    gitlab_id = db.Column(
-        db.Integer, unique=True, nullable=True
-    )  # Only for GitLab users
+    gitlab_id = db.Column(db.BigInteger, unique=True, nullable=True)
     username = db.Column(db.String(255), unique=True, nullable=False)
     name = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(255), nullable=False)
     avatar_url = db.Column(db.String(1024), default="")
-    provider = db.Column(db.String(50), default="local")  # 'gitlab' or 'local'
-    password_hash = db.Column(db.String(255), nullable=True)  # Only for local users
-    gitlab_token = db.Column(db.String(255), nullable=True)  # GitLab PAT for API access
-    password_change_required = db.Column(db.Boolean, default=False)  # For admin user
-    approved = db.Column(db.Boolean, default=True)  # Approval status for new users
+    provider = db.Column(db.String(50), default="local")
+    password_hash = db.Column(db.String(255), nullable=True)
+    gitlab_token = db.Column(db.String(255), nullable=True)
+    password_change_required = db.Column(db.Boolean, default=False)
+    approved = db.Column(db.Boolean, default=True)
     is_admin = db.Column(db.Boolean, default=False)
     created_at = db.Column(
         db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
-    # Selected groups for monitoring
     selected_groups = db.relationship(
         "UserSelectedGroup", back_populates="user", cascade="all, delete-orphan"
     )
@@ -60,9 +61,7 @@ class User(UserMixin, db.Model):
             "email": self.email,
             "avatar_url": self.avatar_url,
             "provider": self.provider,
-            "has_gitlab_token": bool(
-                self.gitlab_token
-            ),  # Don't expose the actual token
+            "has_gitlab_token": bool(self.gitlab_token),
             "approved": self.approved,
             "is_admin": self.is_admin,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -74,7 +73,7 @@ class UserSelectedGroup(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    group_id = db.Column(db.Integer, nullable=False)  # GitLab group ID
+    group_id = db.Column(db.BigInteger, nullable=False)
     group_name = db.Column(db.String(255), nullable=False)
     group_full_path = db.Column(db.String(512), nullable=False)
 
@@ -93,8 +92,8 @@ class Project(db.Model):
     __tablename__ = "projects"
     __table_args__ = (db.Index("ix_projects_group_id", "group_id"),)
 
-    id = db.Column(db.Integer, primary_key=True)  # GitLab project ID
-    group_id = db.Column(db.Integer, nullable=True)
+    id = db.Column(db.BigInteger, primary_key=True)
+    group_id = db.Column(db.BigInteger, nullable=True)
     name = db.Column(db.String(255), nullable=False)
     namespace = db.Column(db.String(512), default="")
     web_url = db.Column(db.String(1024), default="")
@@ -105,16 +104,18 @@ class Project(db.Model):
         "Pipeline",
         back_populates="project",
         cascade="all, delete-orphan",
-        lazy="select",  # Changed from "dynamic" to "select" for eager loading
+        lazy="select",
     )
 
     def latest_pipeline(self):
-        # Find the latest pipeline from the already-loaded pipelines collection
-        # or query if needed (e.g., when called individually)
+        """Return the most recently created pipeline for this project.
+
+        Uses already-loaded pipelines when available to avoid N+1 queries.
+        ``created_at`` may be ``None``; we sort those to the bottom by
+        substituting the timezone-aware sentinel ``_EPOCH``.
+        """
         if self.pipelines:
-            # Pipelines are already loaded; find the latest
-            return max(self.pipelines, key=lambda p: p.created_at or datetime.min)
-        # Fallback to query if pipelines aren't loaded
+            return max(self.pipelines, key=lambda p: p.created_at or _EPOCH)
         return (
             Pipeline.query.filter_by(project_id=self.id)
             .order_by(Pipeline.created_at.desc())
@@ -125,13 +126,16 @@ class Project(db.Model):
         latest = self.latest_pipeline()
         return {
             "id": self.id,
+            # group_id is included so the frontend can filter projects when a
+            # group is removed from the user's selection.
+            "group_id": self.group_id,
             "name": self.name,
             "namespace": self.namespace,
             "web_url": self.web_url,
             "default_branch": self.default_branch,
-            "last_synced_at": self.last_synced_at.isoformat()
-            if self.last_synced_at
-            else None,
+            "last_synced_at": (
+                self.last_synced_at.isoformat() if self.last_synced_at else None
+            ),
             "latest_pipeline": latest.to_dict() if latest else None,
         }
 
@@ -139,8 +143,8 @@ class Project(db.Model):
 class Pipeline(db.Model):
     __tablename__ = "pipelines"
 
-    id = db.Column(db.Integer, primary_key=True)  # GitLab pipeline ID
-    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=False)
+    id = db.Column(db.BigInteger, primary_key=True)
+    project_id = db.Column(db.BigInteger, db.ForeignKey("projects.id"), nullable=False)
     ref = db.Column(db.String(512), default="")
     sha = db.Column(db.String(64), default="")
     status = db.Column(db.String(64), default="unknown")
@@ -179,8 +183,10 @@ class Pipeline(db.Model):
 class PipelineJob(db.Model):
     __tablename__ = "pipeline_jobs"
 
-    id = db.Column(db.Integer, primary_key=True)  # GitLab job ID
-    pipeline_id = db.Column(db.Integer, db.ForeignKey("pipelines.id"), nullable=False)
+    id = db.Column(db.BigInteger, primary_key=True)
+    pipeline_id = db.Column(
+        db.BigInteger, db.ForeignKey("pipelines.id"), nullable=False
+    )
     name = db.Column(db.String(255), default="")
     stage = db.Column(db.String(255), default="")
     status = db.Column(db.String(64), default="unknown")

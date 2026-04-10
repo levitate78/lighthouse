@@ -1,9 +1,11 @@
 import gitlab
 from datetime import datetime, timezone
 from functools import wraps
+
 from flask import Blueprint, current_app, jsonify, request
 from flask_login import login_required, current_user
 from flask_dance.contrib.gitlab import gitlab as gitlab_dance
+from flask_wtf.csrf import generate_csrf
 
 from extensions import db, limiter
 from gitlab_utils import get_gitlab_client
@@ -13,10 +15,46 @@ from sync import sync_pipelines
 api_bp = Blueprint("api", __name__)
 
 
+# ── Health check (unauthenticated) ─────────────────────────────────────────
+
+
+@api_bp.route("/api/health")
+def api_health():
+    """Liveness probe used by Docker healthchecks and load-balancers."""
+    return jsonify({"status": "ok"})
+
+
+# ── CSRF token endpoint ────────────────────────────────────────────────────
+# The SPA fetches this on boot so mutating requests can include the
+# X-CSRFToken header regardless of whether Flask rendered the page
+# (development) or nginx served a pre-built static bundle (production).
+
+
+@api_bp.route("/api/csrf-token")
+def api_csrf_token():
+    """Return a fresh CSRF token for the current session.
+
+    This is a GET request so Flask-WTF does not validate a token on it.
+    The returned token must be sent as the ``X-CSRFToken`` header on all
+    state-mutating requests (POST / PUT / PATCH / DELETE).
+    """
+    token = generate_csrf()
+    response = jsonify({"csrf_token": token})
+    # Ensure the session cookie is sent so the token stays valid.
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+# ── Current user ───────────────────────────────────────────────────────────
+
+
 @api_bp.route("/api/user/current")
 @login_required
 def api_current_user():
     return jsonify(current_user.to_dict())
+
+
+# ── GitLab token management ────────────────────────────────────────────────
 
 
 @api_bp.route("/api/user/gitlab-token", methods=["POST"])
@@ -34,14 +72,12 @@ def api_update_gitlab_token():
     if not token:
         return jsonify({"error": "Token is required"}), 400
 
-    # Validate the token
     from gitlab_utils import validate_gitlab_token
 
     is_valid, error_msg = validate_gitlab_token(token)
     if not is_valid:
         return jsonify({"error": f"Invalid GitLab token: {error_msg}"}), 400
 
-    # Update the user's token
     current_user.gitlab_token_decrypted = token
     try:
         db.session.commit()
@@ -52,6 +88,9 @@ def api_update_gitlab_token():
             "Failed to update GitLab token for user %s: %s", current_user.id, exc
         )
         return jsonify({"error": "Failed to update token"}), 500
+
+
+# ── Group management ───────────────────────────────────────────────────────
 
 
 @api_bp.route("/api/user/groups", methods=["GET"])
@@ -76,7 +115,6 @@ def api_add_user_group():
     if not group_identifier:
         return jsonify({"error": "Missing group_id or group_path"}), 400
 
-    # Validate group_id if provided
     if data.get("group_id"):
         try:
             group_id_int = int(group_identifier)
@@ -85,7 +123,6 @@ def api_add_user_group():
         except (ValueError, TypeError):
             return jsonify({"error": "group_id must be a valid integer"}), 400
 
-    # Validate group_path if provided
     if data.get("group_path") and not isinstance(group_identifier, str):
         return jsonify({"error": "group_path must be a string"}), 400
 
@@ -97,7 +134,10 @@ def api_add_user_group():
     else:
         return jsonify(
             {
-                "error": "GitLab authentication required. Please provide a GitLab token or login via GitLab OAuth"
+                "error": (
+                    "GitLab authentication required. Please provide a GitLab token "
+                    "or login via GitLab OAuth"
+                )
             }
         ), 403
 
@@ -127,8 +167,7 @@ def api_add_user_group():
         return jsonify(group_obj.to_dict())
     except gitlab.exceptions.GitlabAuthenticationError:
         current_app.logger.warning(
-            "GitLab authentication failed for user %s",
-            current_user.id,
+            "GitLab authentication failed for user %s", current_user.id
         )
         return jsonify(
             {"error": "Invalid GitLab token. Please check your token and try again"}
@@ -166,9 +205,12 @@ def api_remove_user_group(group_id):
     return jsonify({"status": "ok"})
 
 
+# ── Authorisation helpers ──────────────────────────────────────────────────
+
+
 def _get_authorized_project_group_ids():
     group_ids = [group.group_id for group in current_user.selected_groups]
-    return [group_id for group_id in group_ids if group_id is not None]
+    return [gid for gid in group_ids if gid is not None]
 
 
 def admin_required(view_func):
@@ -181,13 +223,16 @@ def admin_required(view_func):
     return wrapper
 
 
+# ── Projects ───────────────────────────────────────────────────────────────
+
+
 @api_bp.route("/api/projects")
 @login_required
 def api_projects():
     group_ids = _get_authorized_project_group_ids()
     page = request.args.get("page", 1, type=int)
-    per_page = request.args.get("per_page", 25, type=int)
-    per_page = max(1, min(per_page, 100))
+    per_page = request.args.get("per_page", 100, type=int)
+    per_page = max(1, min(per_page, 500))
 
     if not group_ids:
         return jsonify(
@@ -214,6 +259,9 @@ def api_projects():
     )
 
 
+# ── Pipelines ──────────────────────────────────────────────────────────────
+
+
 @api_bp.route("/api/projects/<int:project_id>/pipelines")
 @login_required
 def api_pipelines(project_id):
@@ -232,8 +280,7 @@ def api_pipelines(project_id):
         return jsonify({"error": "Project not found"}), 404
 
     limit = request.args.get("limit", 10, type=int)
-    if limit < 1 or limit > 100:
-        limit = 10  # Default to 10 if invalid
+    limit = max(1, min(limit, 100))
 
     pipelines = (
         Pipeline.query.filter_by(project_id=project_id)
@@ -242,6 +289,9 @@ def api_pipelines(project_id):
         .all()
     )
     return jsonify([p.to_dict() for p in pipelines])
+
+
+# ── Jobs ───────────────────────────────────────────────────────────────────
 
 
 @api_bp.route("/api/pipelines/<int:pipeline_id>/jobs")
@@ -266,6 +316,9 @@ def api_jobs(pipeline_id):
     return jsonify([j.to_dict() for j in jobs])
 
 
+# ── Summary ────────────────────────────────────────────────────────────────
+
+
 @api_bp.route("/api/summary")
 @login_required
 def api_summary():
@@ -280,6 +333,7 @@ def api_summary():
         )
 
     total_projects = Project.query.filter(Project.group_id.in_(group_ids)).count()
+
     from sqlalchemy import func
 
     sub = (
@@ -301,7 +355,7 @@ def api_summary():
         .filter(Project.group_id.in_(group_ids))
         .all()
     )
-    status_counts = {}
+    status_counts: dict[str, int] = {}
     for p in latest:
         status_counts[p.status] = status_counts.get(p.status, 0) + 1
 
@@ -312,6 +366,9 @@ def api_summary():
             "total_latest_pipelines": len(latest),
         }
     )
+
+
+# ── Sync ───────────────────────────────────────────────────────────────────
 
 
 @api_bp.route("/api/sync", methods=["POST"])
@@ -326,17 +383,18 @@ def api_sync():
         return jsonify(
             {"status": "ok", "synced_at": datetime.now(timezone.utc).isoformat()}
         )
-    else:
-        return jsonify(
-            {
-                "status": "partial",
-                "synced_at": datetime.now(timezone.utc).isoformat(),
-                "failures": result["failures"],
-            }
-        ), 207  # Multi-Status
+    return jsonify(
+        {
+            "status": "partial",
+            "synced_at": datetime.now(timezone.utc).isoformat(),
+            "failures": result["failures"],
+        }
+    ), 207
 
 
-# Admin endpoints for user approval
+# ── Admin ──────────────────────────────────────────────────────────────────
+
+
 @api_bp.route("/api/admin/users")
 @login_required
 @admin_required
