@@ -160,6 +160,7 @@ filenames into `templates/index.html` at request time.
 | `SYNC_INTERVAL_SECONDS` | GitLab poll interval                             | `60`                            |
 | `VITE_DEV_SERVER`       | Vite dev server URL (dev only, blank in prod)    | *(blank)*                       |
 | `SECRET_KEY`            | Flask secret key                                 | *(change in production)*        |
+| `SESSION_COOKIE_SECURE` | Send session cookies only over HTTPS             | `false`                         |
 | `SCHEDULER_ENABLED`     | Enable scheduler startup (`1`) for scheduler-capable processes | `0`                             |
 | `SCHEDULER_LOCK_FILE`   | File path used for inter-process scheduler lock    | `/tmp/lighthouse_scheduler.lock`|
 
