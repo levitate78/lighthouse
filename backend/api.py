@@ -401,6 +401,7 @@ def api_job_metrics():
     days = request.args.get("days", 30, type=int)
     days = max(1, min(days, 365))
     branch = request.args.get("branch", "").strip()
+    job_name = request.args.get("job_name", "").strip()
 
     active_group_ids = group_ids
     if requested_group_id:
@@ -431,6 +432,9 @@ def api_job_metrics():
 
     if branch:
         query = query.filter(Pipeline.ref.ilike(f"%{branch}%"))
+
+    if job_name:
+        query = query.filter(PipelineJob.name == job_name)
 
     since = datetime.now(timezone.utc) - timedelta(days=days)
     query = query.filter(Pipeline.created_at >= since)

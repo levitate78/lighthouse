@@ -180,6 +180,7 @@ export async function fetchJobMetrics(filters = {}) {
   if (filters.projectId) params.set('project_id', filters.projectId)
   if (filters.days) params.set('days', filters.days)
   if (filters.branch) params.set('branch', filters.branch)
+  if (filters.jobName) params.set('job_name', filters.jobName)
   const query = params.toString()
   return get(`/api/job-metrics${query ? `?${query}` : ''}`)
 }

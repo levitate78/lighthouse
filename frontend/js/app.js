@@ -68,12 +68,13 @@ const state = {
   searchQuery: '',
   /** @type {'projects'|'metrics'} */
   currentPage: 'projects',
-  /** @type {{groupId: string, projectId: string, days: string, branch: string}} */
+  /** @type {{groupId: string, projectId: string, days: string, branch: string, jobName: string}} */
   metricsFilters: {
     groupId: '',
     projectId: '',
     days: '30',
     branch: '',
+    jobName: '',
   },
   /** @type {boolean} */
   wasSyncing: false,

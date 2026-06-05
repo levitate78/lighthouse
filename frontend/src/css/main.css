@@ -807,16 +807,33 @@ ul   { list-style: none; }
 
 .chart-point {
   fill: var(--accent);
+  cursor: pointer;
+  transition: r 0.2s ease;
+}
+
+.chart-point:hover {
+  r: 5;
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.2));
 }
 
 .chart-bar-success {
   fill: var(--success);
   opacity: 0.82;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
 }
 
 .chart-bar-failed {
   fill: var(--fail);
   opacity: 0.88;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.chart-bar-group:hover .chart-bar-success,
+.chart-bar-group:hover .chart-bar-failed {
+  opacity: 1;
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.3));
 }
 
 .jobs-rank {
