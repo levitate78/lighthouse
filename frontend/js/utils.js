@@ -84,3 +84,21 @@ export function loadingShimmer(rows = 6) {
     </div>`
   ).join('')
 }
+
+/**
+ * Debounce function calls to prevent rapid firing.
+ * @param {Function} func
+ * @param {number} wait
+ * @returns {Function}
+ */
+export function debounce(func, wait) {
+  let timeout
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout)
+      func(...args)
+    }
+    clearTimeout(timeout)
+    timeout = setTimeout(later, wait)
+  }
+}

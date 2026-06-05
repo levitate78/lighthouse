@@ -5,7 +5,7 @@ from flask import current_app
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from extensions import db, scheduler
 from gitlab_utils import get_gitlab_client
-from models import Project, Pipeline, PipelineJob, UserSelectedGroup
+from models import Project, Pipeline, PipelineJob, UserSelectedGroup, SyncProgress
 
 logger = logging.getLogger(__name__)
 
@@ -93,13 +93,24 @@ def _background_sync_older_pipelines(group_ids, user_token):
                 group = gl.groups.get(group_id)
                 projects = group.projects.list(get_all=True)
 
-                for proj in projects:
+                progress = db.session.get(SyncProgress, group_id)
+                if not progress:
+                    progress = SyncProgress(group_id=group_id)
+                    db.session.add(progress)
+                progress.group_name = group.name
+                progress.status = "syncing_history"
+                progress.message = "Starting history sync..."
+                db.session.commit()
+
+                synced_pipelines_count = 0
+
+                for proj_idx, proj in enumerate(projects):
                     proj_data = proj.asdict()
                     project = db.session.get(Project, proj_data["id"])
                     if not project:
                         continue
 
-                    page = 2
+                    page = 1
                     while True:
                         pipelines = gl.projects.get(proj_data["id"]).pipelines.list(
                             per_page=10, page=page, get_all=False
@@ -107,17 +118,66 @@ def _background_sync_older_pipelines(group_ids, user_token):
                         if not pipelines:
                             break
 
+                        target_pids = []
                         for pipe in pipelines:
                             pipe_data = pipe.asdict()
                             _upsert_pipeline(pipe_data, proj_data["id"])
+
+                            # Fetch jobs only if not already cached
+                            jobs_exist = db.session.query(PipelineJob.id).filter_by(pipeline_id=pipe.id).first() is not None
+                            if not jobs_exist:
+                                target_pids.append(pipe.id)
+
+                        if target_pids:
+                            MAX_WORKERS = 5
+                            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                                futures = [
+                                    executor.submit(
+                                        _fetch_jobs_for_pipeline,
+                                        gl,
+                                        proj_data["id"],
+                                        pid,
+                                    )
+                                    for pid in target_pids
+                                ]
+
+                                for future in as_completed(futures):
+                                    try:
+                                        pipeline_id, jobs_data = future.result(timeout=15)
+                                        _sync_jobs_for_pipeline(pipeline_id, jobs_data)
+                                    except Exception as e:
+                                        logger.warning('Parallel job fetch failed for project %s:%s', proj_data["id"], e)
+
+                        synced_pipelines_count += len(pipelines)
+
+                        progress = db.session.get(SyncProgress, group_id)
+                        if progress:
+                            progress.current_project = proj_idx + 1
+                            progress.current_pipeline = min(synced_pipelines_count, progress.total_pipelines)
+                            total_p = max(progress.total_pipelines, synced_pipelines_count)
+                            progress.message = f"Syncing pipeline {progress.current_pipeline} of {total_p} for group {group.name}"
+                            db.session.commit()
+
                         db.session.commit()
                         page += 1
+
+                progress = db.session.get(SyncProgress, group_id)
+                if progress:
+                    progress.status = "completed"
+                    progress.message = "Sync complete"
+                    db.session.commit()
+
             except Exception as exc:
                 logger.warning(
                     "Background sync failed for group %s: %s",
                     group_id,
                     exc,
                 )
+                progress = db.session.get(SyncProgress, group_id)
+                if progress:
+                    progress.status = "failed"
+                    progress.message = f"Background sync failed: {exc}"
+                    db.session.commit()
         db.session.remove()
 
 
@@ -157,8 +217,48 @@ def sync_pipelines(group_ids=None, background=False, user_token=None):
                     group = gl.groups.get(group_id)
                     projects = group.projects.list(get_all=True)
 
-                    for proj in projects:
+                    # Fetch total pipeline counts in parallel
+                    def _fetch_pipeline_count(gl_client, project_id):
+                        try:
+                            pipelines_list = gl_client.projects.get(project_id).pipelines.list(per_page=1, get_all=False)
+                            return getattr(pipelines_list, 'total', 0)
+                        except Exception:
+                            return 0
+
+                    total_pipelines = 0
+                    with ThreadPoolExecutor(max_workers=5) as count_executor:
+                        count_futures = [
+                            count_executor.submit(_fetch_pipeline_count, gl, proj.asdict()["id"])
+                            for proj in projects
+                        ]
+                        for f in as_completed(count_futures):
+                            try:
+                                total_pipelines += f.result()
+                            except Exception:
+                                pass
+
+                    progress = db.session.get(SyncProgress, group_id)
+                    if not progress:
+                        progress = SyncProgress(group_id=group_id)
+                        db.session.add(progress)
+                    progress.group_name = group.name
+                    progress.status = "syncing"
+                    progress.total_projects = len(projects)
+                    progress.current_project = 0
+                    progress.total_pipelines = total_pipelines
+                    progress.current_pipeline = 0
+                    progress.message = f"Starting sync for group {group.name}..."
+                    db.session.commit()
+
+                    for idx, proj in enumerate(projects):
                         proj_data = proj.asdict()
+
+                        progress = db.session.get(SyncProgress, group_id)
+                        if progress:
+                            progress.current_project = idx + 1
+                            progress.message = f"Syncing project {proj_data['name']} ({idx+1} of {len(projects)})"
+                            db.session.commit()
+
                         project = db.session.get(Project, proj_data["id"])
                         if not project:
                             project = Project(id=proj_data["id"])
@@ -210,9 +310,27 @@ def sync_pipelines(group_ids=None, background=False, user_token=None):
 
                     db.session.commit()
                     logger.info("Sync complete for group %s.", group_id)
+
+                    progress = db.session.get(SyncProgress, group_id)
+                    if progress:
+                        if background:
+                            progress.status = "syncing_history"
+                            progress.message = "Starting history sync..."
+                        else:
+                            progress.status = "completed"
+                            progress.message = "Sync complete"
+                        db.session.commit()
+
                 except Exception as exc:
                     db.session.rollback()
                     logger.warning("Failed to sync group %s: %s", group_id, exc)
+
+                    progress = db.session.get(SyncProgress, group_id)
+                    if progress:
+                        progress.status = "failed"
+                        progress.message = f"Failed to sync group: {exc}"
+                        db.session.commit()
+
                     results["failures"].append(
                         {
                             "group_id": group_id,

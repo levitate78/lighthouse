@@ -9,19 +9,40 @@ import hashlib
 logger = logging.getLogger(__name__)
 
 
-def get_fernet():
+def get_fernet() -> Fernet:
+    """Generate a Fernet cipher instance using the application secret key.
+
+    Returns:
+        Fernet: A Fernet cryptography cipher object.
+    """
     key = hashlib.sha256(current_app.config["GLT_SECRET_KEY"].encode()).digest()
     return Fernet(base64.urlsafe_b64encode(key))
 
 
-def encrypt_token(token):
+def encrypt_token(token: str) -> str | None:
+    """Encrypt a GitLab personal access token.
+
+    Args:
+        token (str): The raw token string.
+
+    Returns:
+        str | None: The encrypted token string, or None if no token is provided.
+    """
     if not token:
         return None
     f = get_fernet()
     return f.encrypt(token.encode()).decode()
 
 
-def decrypt_token(encrypted):
+def decrypt_token(encrypted: str) -> str | None:
+    """Decrypt a GitLab personal access token.
+
+    Args:
+        encrypted (str): The encrypted token string.
+
+    Returns:
+        str | None: The raw decrypted token string, or None if decryption fails.
+    """
     if not encrypted:
         return None
     try:
@@ -32,15 +53,30 @@ def decrypt_token(encrypted):
         return None
 
 
-def get_gitlab_client(private_token=None):
-    """Create a GitLab client for the configured instance."""
+def get_gitlab_client(private_token: str | None = None) -> gitlab.Gitlab:
+    """Create and return an authenticated GitLab client.
+
+    Args:
+        private_token (str | None): Optional GitLab token. Defaults to config token if not provided.
+
+    Returns:
+        gitlab.Gitlab: The authenticated GitLab API client instance.
+    """
     config = current_app.config
     token = private_token or config.get("GITLAB_TOKEN")
     return gitlab.Gitlab(config["GITLAB_URL"], private_token=token)
 
 
 def validate_gitlab_token(token: str) -> tuple[bool, str]:
-    """Validate a GitLab token by calling the user API."""
+    """Validate a GitLab Personal Access Token by fetching the user profile.
+
+    Args:
+        token (str): The raw token string to validate.
+
+    Returns:
+        tuple[bool, str]: A tuple where the first element is a boolean indicating validity,
+            and the second element is an error message if invalid, or empty string.
+    """
     if not token or not token.strip():
         return False, "Token is empty"
 

@@ -20,9 +20,10 @@ import {
   fetchAdminUsers,
   approveUser,
   rejectUser,
+  fetchSyncStatus,
 } from './api.js'
 
-import { esc } from './utils.js'
+import { esc, debounce } from './utils.js'
 
 import {
   renderSummary,
@@ -39,6 +40,7 @@ import {
   setLastSync,
   renderUserInfo,
   renderGroups,
+  renderSyncProgress,
 } from './render.js'
 
 // ── Application state ──────────────────────────────────────────────────────
@@ -54,6 +56,14 @@ const state = {
   activeProject: null,
   /** @type {number|null} */
   activePipelineId: null,
+  /** @type {string} */
+  branchFilter: '',
+  /** @type {string|null} */
+  statusFilter: null,
+  /** @type {string} */
+  searchQuery: '',
+  /** @type {boolean} */
+  wasSyncing: false,
 }
 
 // ── Group management ───────────────────────────────────────────────────────
@@ -133,6 +143,10 @@ async function boot() {
   renderMainEmpty()
   await refreshAll()
 
+  // Start polling sync status immediately, and then every 3 seconds
+  checkSyncStatus()
+  setInterval(checkSyncStatus, 3000)
+
   // Auto-refresh every 30 s
   setInterval(refreshAll, 30_000)
 
@@ -140,6 +154,39 @@ async function boot() {
 
   document.getElementById('search-input')
     ?.addEventListener('input', e => filterProjects(e.target.value))
+
+  document.getElementById('branch-filter-input')
+    ?.addEventListener('input', debounce(e => {
+      state.branchFilter = e.target.value.trim()
+      refreshProjects()
+    }, 300))
+
+  // Set up click listeners for the summary bar stat chips (filtering buttons)
+  document.querySelectorAll('.summary-bar .stat-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const status = chip.dataset.status
+      if (status === 'all') {
+        state.statusFilter = null
+      } else if (state.statusFilter === status) {
+        state.statusFilter = null
+      } else {
+        state.statusFilter = status
+      }
+      
+      // Update active classes
+      document.querySelectorAll('.summary-bar .stat-chip').forEach(c => {
+        const isActive = (state.statusFilter === null && c.dataset.status === 'all') || (c.dataset.status === state.statusFilter)
+        c.classList.toggle('stat-chip--active', isActive)
+      })
+      
+      applyFilters()
+    })
+  })
+
+  // Set initial active status chip
+  document.querySelectorAll('.summary-bar .stat-chip').forEach(c => {
+    c.classList.toggle('stat-chip--active', c.dataset.status === 'all')
+  })
 
   document.getElementById('sync-btn')
     ?.addEventListener('click', handleSync)
@@ -187,6 +234,25 @@ async function boot() {
     })
 }
 
+// ── Sync progress polling ──────────────────────────────────────────────────
+
+async function checkSyncStatus() {
+  try {
+    const syncStatuses = await fetchSyncStatus()
+    renderSyncProgress(syncStatuses)
+
+    const isAnySyncing = syncStatuses.some(s => ['syncing', 'syncing_history'].includes(s.status))
+    setSyncSpinning(isAnySyncing)
+
+    if (state.wasSyncing && !isAnySyncing) {
+      await refreshAll()
+    }
+    state.wasSyncing = isAnySyncing
+  } catch (err) {
+    console.warn('[sync status check]', err)
+  }
+}
+
 // ── Data loading ───────────────────────────────────────────────────────────
 
 async function refreshAll() {
@@ -205,10 +271,35 @@ async function refreshSummary() {
   }
 }
 
+function applyFilters() {
+  const q = state.searchQuery.toLowerCase().trim()
+  let filtered = state.projects
+
+  if (state.statusFilter) {
+    filtered = filtered.filter(p => {
+      const status = p.latest_pipeline?.status ?? 'unknown'
+      if (state.statusFilter === 'other') {
+        return !['success', 'failed', 'running', 'pending'].includes(status)
+      }
+      return status === state.statusFilter
+    })
+  }
+
+  if (q) {
+    filtered = filtered.filter(
+      p =>
+        p.name.toLowerCase().includes(q) ||
+        p.namespace.toLowerCase().includes(q)
+    )
+  }
+
+  renderSidebar(filtered, state.activeProject?.id, selectProject)
+}
+
 async function refreshProjects() {
   try {
-    state.projects = await fetchProjects()
-    renderSidebar(state.projects, state.activeProject?.id, selectProject)
+    state.projects = await fetchProjects(state.branchFilter)
+    applyFilters()
     setLastSync(new Date().toLocaleTimeString())
   } catch (err) {
     console.warn('[projects]', err)
@@ -230,7 +321,7 @@ async function loadProjectDetail(projectId) {
 
   renderMainLoading()
   try {
-    const pipelines = await fetchPipelines(projectId)
+    const pipelines = await fetchPipelines(projectId, 15, state.branchFilter)
     const { autoLoadPipelineId } = renderProjectDetail(
       project,
       pipelines,
@@ -263,15 +354,8 @@ async function selectPipeline(pipelineId) {
 // ── Search / filter ────────────────────────────────────────────────────────
 
 function filterProjects(query) {
-  const q = query.toLowerCase().trim()
-  const filtered = q
-    ? state.projects.filter(
-        p =>
-          p.name.toLowerCase().includes(q) ||
-          p.namespace.toLowerCase().includes(q),
-      )
-    : state.projects
-  renderSidebar(filtered, state.activeProject?.id, selectProject)
+  state.searchQuery = query
+  applyFilters()
 }
 
 // ── Manual sync ────────────────────────────────────────────────────────────
@@ -280,11 +364,9 @@ async function handleSync() {
   setSyncSpinning(true)
   try {
     await triggerSync()
-    await refreshAll()
-    setLastSync(new Date().toLocaleTimeString())
+    checkSyncStatus()
   } catch (err) {
     if (!err.message.includes('redirecting')) console.error('[sync]', err)
-  } finally {
     setSyncSpinning(false)
   }
 }
@@ -312,11 +394,9 @@ async function handleAddGroupForm(e) {
     setSyncSpinning(true)
     try {
       await triggerSync()
-      await refreshAll()
-      setLastSync(new Date().toLocaleTimeString())
+      checkSyncStatus()
     } catch (syncErr) {
       console.error('[sync after add group]', syncErr)
-    } finally {
       setSyncSpinning(false)
     }
   } catch (err) {

@@ -9,7 +9,7 @@ from flask_wtf.csrf import generate_csrf
 
 from extensions import db, limiter
 from gitlab_utils import get_gitlab_client, decrypt_token
-from models import User, Project, Pipeline, PipelineJob, UserSelectedGroup
+from models import User, Project, Pipeline, PipelineJob, UserSelectedGroup, SyncProgress
 from sync import sync_pipelines
 
 api_bp = Blueprint("api", __name__)
@@ -233,6 +233,7 @@ def api_projects():
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 100, type=int)
     per_page = max(1, min(per_page, 500))
+    branch = request.args.get("branch", "").strip()
 
     if not group_ids:
         return jsonify(
@@ -245,12 +246,16 @@ def api_projects():
             }
         )
 
-    query = Project.query.filter(Project.group_id.in_(group_ids)).order_by(Project.name)
+    query = Project.query.filter(Project.group_id.in_(group_ids))
+    if branch:
+        query = query.join(Pipeline).filter(Pipeline.ref.ilike(f"%{branch}%")).distinct()
+    query = query.order_by(Project.name)
+    
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
     return jsonify(
         {
-            "projects": [p.to_dict() for p in pagination.items],
+            "projects": [p.to_dict(branch=branch) for p in pagination.items],
             "page": pagination.page,
             "per_page": pagination.per_page,
             "total": pagination.total,
@@ -281,9 +286,14 @@ def api_pipelines(project_id):
 
     limit = request.args.get("limit", 10, type=int)
     limit = max(1, min(limit, 100))
+    branch = request.args.get("branch", "").strip()
+
+    pipelines_query = Pipeline.query.filter_by(project_id=project_id)
+    if branch:
+        pipelines_query = pipelines_query.filter(Pipeline.ref.ilike(f"%{branch}%"))
 
     pipelines = (
-        Pipeline.query.filter_by(project_id=project_id)
+        pipelines_query
         .order_by(Pipeline.created_at.desc())
         .limit(limit)
         .all()
@@ -379,7 +389,7 @@ def api_sync():
     if not group_ids:
         return jsonify({"error": "No groups selected"}), 400
     token = decrypt_token(current_user.gitlab_token)
-    result = sync_pipelines(group_ids=group_ids, background=True)
+    result = sync_pipelines(group_ids=group_ids, background=True, user_token=token)
     if result["success"]:
         return jsonify(
             {"status": "ok", "synced_at": datetime.now(timezone.utc).isoformat()}
@@ -391,6 +401,17 @@ def api_sync():
             "failures": result["failures"],
         }
     ), 207
+
+
+@api_bp.route("/api/sync/status")
+@login_required
+def api_sync_status():
+    group_ids = _get_authorized_project_group_ids()
+    if not group_ids:
+        return jsonify([])
+    
+    statuses = SyncProgress.query.filter(SyncProgress.group_id.in_(group_ids)).all()
+    return jsonify([s.to_dict() for s in statuses])
 
 
 # ── Admin ──────────────────────────────────────────────────────────────────

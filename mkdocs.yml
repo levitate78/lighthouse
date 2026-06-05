@@ -1,0 +1,25 @@
+site_name: LIGHTHOUSE Documentation
+theme:
+  name: material
+  palette:
+    scheme: slate
+    primary: deep orange
+    accent: deep orange
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [backend]
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - REST API & Code Reference: api.md
+  - Deployment: deployment.md

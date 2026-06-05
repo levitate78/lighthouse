@@ -284,7 +284,9 @@ export function renderUserInfo(user) {
   const gitlabStatusEl = document.getElementById('gitlab-status')
   
   if (nameEl) nameEl.textContent = user.name
-  if (avatarEl) avatarEl.src = user.avatar || '/static/default-avatar.png'
+  
+  const defaultAvatar = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%236b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/></svg>`;
+  if (avatarEl) avatarEl.src = user.avatar || defaultAvatar
   
   if (gitlabStatusEl) {
     if (user.has_gitlab_token) {
@@ -341,4 +343,36 @@ function branchIcon() {
     <circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
     <path d="M18 9a9 9 0 0 1-9 9"/>
   </svg>`
+}
+
+/**
+ * Render sync progress status.
+ * @param {Array} syncStatuses
+ */
+export function renderSyncProgress(syncStatuses) {
+  const container = document.getElementById('sync-status-indicator')
+  if (!container) return
+
+  const activeSyncs = syncStatuses.filter(s => ['syncing', 'syncing_history'].includes(s.status))
+  if (activeSyncs.length === 0) {
+    container.style.display = 'none'
+    container.innerHTML = ''
+    return
+  }
+
+  // Show the first active sync progress message
+  const sync = activeSyncs[0]
+  container.style.display = 'inline-flex'
+  
+  let msg = sync.message || 'Syncing...'
+  
+  container.innerHTML = `
+    <svg class="btn-icon" width="12" height="12" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2.2" aria-hidden="true" style="animation: spin 1s linear infinite; margin-right: 4px;">
+      <polyline points="23 4 23 10 17 10"></polyline>
+      <polyline points="1 20 1 14 7 14"></polyline>
+      <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"></path>
+    </svg>
+    <span>${esc(msg)}</span>
+  `
 }

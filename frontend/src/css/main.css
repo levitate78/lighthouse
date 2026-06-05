@@ -139,21 +139,58 @@ ul   { list-style: none; }
 }
 
 .stat-chip {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 6px 14px;
   border-radius: var(--radius);
   border: 1px solid var(--border2);
   background: var(--surface);
+  color: var(--text-dim);
   white-space: nowrap;
   font-family: var(--mono);
   font-size: 12px;
+  cursor: pointer;
+  outline: none;
+  transition: var(--transition);
+}
+
+.stat-chip:hover {
+  background: var(--surface2);
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+.stat-chip--active {
+  background: var(--surface2);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
 }
 
 .stat-chip .count {
   font-weight: 600;
   font-size: 15px;
+}
+
+.sync-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  border: 1px dashed var(--accent);
+  background: var(--accent-glow);
+  color: var(--accent);
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 12px;
+  animation: pulse-sync 2s infinite;
+}
+
+@keyframes pulse-sync {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
 }
 
 /* ── Layout ─────────────────────────────────────────────────────────────── */

@@ -14,3 +14,6 @@ cryptography>=46.0.7
 gunicorn>=22.0.0
 psycopg2-binary>=2.9.11
 alembic>=1.13.0
+mkdocs>=1.5.0
+mkdocs-material>=9.0.0
+mkdocstrings[python]>=0.20.0
