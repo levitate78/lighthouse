@@ -168,6 +168,34 @@ Use:
 
 when appropriate.
 
+### Dual Template Architecture
+
+This project maintains two HTML templates that must be kept in sync:
+
+1. **`frontend/index.html`** — Primary template for production SPA
+   - Served by nginx in production
+   - Used by Vite build system
+   - Source of truth for HTML structure
+
+2. **`backend/templates/index.html`** — Development template with Jinja2 injection
+   - Rendered by Flask during development
+   - Injects Vite dev server URLs for HMR (hot reload)
+   - Injects CSRF token meta tag
+   - Should mirror the structure of `frontend/index.html`
+
+**When updating HTML structure (navbar, layout, IDs, etc.):**
+- Update `frontend/index.html` first
+- Then apply the same changes to `backend/templates/index.html`
+- Verify both files have matching element IDs, classes, and structure
+- Failure to sync causes bugs where features work in production but not in development
+
+**Key elements that must match between templates:**
+- Element IDs used by JavaScript (e.g., `main-panel`, `project-list`, `metrics-page-btn`)
+- CSS class names used for styling
+- Navigation structure and button IDs
+- Modal IDs and structure
+- Form IDs and input names
+
 ## Accessibility
 
 Maintain accessibility standards:
