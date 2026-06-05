@@ -115,6 +115,7 @@ export function renderMetricsPage(data, filters, onFilterChange) {
   const summary = data.summary ?? {}
   const tests = summary.tests ?? {}
   const duration = summary.duration ?? {}
+  const jobNames = (data.jobs_by_name ?? []).map(job => job.name).sort()
 
   panel.innerHTML = `
     <div class="metrics-header">
@@ -153,6 +154,16 @@ export function renderMetricsPage(data, filters, onFilterChange) {
         <label>
           Branch
           <input id="metrics-branch-filter" type="search" value="${esc(filters.branch || '')}" placeholder="Any branch">
+        </label>
+        <label>
+          Job name
+          <select id="metrics-job-filter">
+            <option value="">All jobs</option>
+            ${jobNames.map(name => `
+              <option value="${esc(name)}" ${filters.jobName === name ? 'selected' : ''}>
+                ${esc(name)}
+              </option>`).join('')}
+          </select>
         </label>
       </div>
     </div>
@@ -204,6 +215,7 @@ export function renderMetricsPage(data, filters, onFilterChange) {
     projectId: document.getElementById('metrics-project-filter')?.value || '',
     days: document.getElementById('metrics-days-filter')?.value || '30',
     branch: document.getElementById('metrics-branch-filter')?.value.trim() || '',
+    jobName: document.getElementById('metrics-job-filter')?.value || '',
   })
 
   document.getElementById('metrics-group-filter')?.addEventListener('change', () => {
@@ -213,6 +225,7 @@ export function renderMetricsPage(data, filters, onFilterChange) {
   document.getElementById('metrics-project-filter')?.addEventListener('change', emit)
   document.getElementById('metrics-days-filter')?.addEventListener('change', emit)
   document.getElementById('metrics-branch-filter')?.addEventListener('input', debounceEvent(emit, 350))
+  document.getElementById('metrics-job-filter')?.addEventListener('change', emit)
 }
 
 /**
@@ -530,8 +543,10 @@ function durationChart(trends) {
   const points = trends.map((row, index) => `${x(index)},${y(row.duration?.avg)}`).join(' ')
   const ranges = trends.map((row, index) => `
     <line x1="${x(index)}" y1="${y(row.duration?.min)}" x2="${x(index)}" y2="${y(row.duration?.max)}" class="chart-range"/>
-    <circle cx="${x(index)}" cy="${y(row.duration?.avg)}" r="3" class="chart-point">
-      <title>${esc(row.date)} avg ${esc(formatDuration(row.duration?.avg))}</title>
+    <circle cx="${x(index)}" cy="${y(row.duration?.avg)}" r="3" class="chart-point" data-toggle="tooltip" 
+      data-date="${esc(row.date)}" data-avg="${formatDuration(row.duration?.avg)}" 
+      data-min="${formatDuration(row.duration?.min)}" data-max="${formatDuration(row.duration?.max)}">
+      <title>${esc(row.date)} avg ${esc(formatDuration(row.duration?.avg))} (min: ${esc(formatDuration(row.duration?.min))}, max: ${esc(formatDuration(row.duration?.max))})</title>
     </circle>`).join('')
 
   return `
@@ -557,11 +572,16 @@ function statusChart(trends) {
     const failedHeight = ((row.failed ?? 0) / max) * (height - pad * 2)
     const failedY = height - pad - failedHeight
     const successY = failedY - successHeight
+    const successCount = row.success ?? 0
+    const failedCount = row.failed ?? 0
+    const totalCount = successCount + failedCount
     return `
-      <rect x="${barX}" y="${successY}" width="${barWidth}" height="${successHeight}" class="chart-bar-success"/>
-      <rect x="${barX}" y="${failedY}" width="${barWidth}" height="${failedHeight}" class="chart-bar-failed">
-        <title>${esc(row.date)} ${row.success ?? 0} passed / ${row.failed ?? 0} failed</title>
-      </rect>`
+      <g class="chart-bar-group" data-toggle="tooltip" data-date="${esc(row.date)}" data-passed="${successCount}" data-failed="${failedCount}" data-total="${totalCount}">
+        <rect x="${barX}" y="${successY}" width="${barWidth}" height="${successHeight}" class="chart-bar-success"/>
+        <rect x="${barX}" y="${failedY}" width="${barWidth}" height="${failedHeight}" class="chart-bar-failed">
+          <title>${esc(row.date)} ${successCount} passed / ${failedCount} failed (${totalCount} total)</title>
+        </rect>
+      </g>`
   }).join('')
 
   return `
