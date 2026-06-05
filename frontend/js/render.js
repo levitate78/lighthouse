@@ -93,6 +93,128 @@ export function renderMainError(message) {
     </div>`
 }
 
+export function renderMetricsLoading() {
+  const panel = document.getElementById('main-panel')
+  if (panel) panel.innerHTML = loadingShimmer(8)
+}
+
+export function renderMetricsError(message) {
+  const panel = document.getElementById('main-panel')
+  if (!panel) return
+  panel.innerHTML = `<div class="empty-state"><span class="error-text">Failed to load metrics: ${esc(message)}</span></div>`
+}
+
+export function renderMetricsPage(data, filters, onFilterChange) {
+  const panel = document.getElementById('main-panel')
+  if (!panel) return
+
+  const groups = data.filters?.groups ?? []
+  const projects = (data.filters?.projects ?? []).filter(project => (
+    !filters.groupId || String(project.group_id) === String(filters.groupId)
+  ))
+  const summary = data.summary ?? {}
+  const tests = summary.tests ?? {}
+  const duration = summary.duration ?? {}
+
+  panel.innerHTML = `
+    <div class="metrics-header">
+      <div>
+        <div class="proj-title">Pipeline Job Metrics</div>
+        <div class="proj-path">Aggregated job duration, status, tests, and coverage trends</div>
+      </div>
+      <div class="metrics-filters">
+        <label>
+          Group
+          <select id="metrics-group-filter">
+            <option value="">All groups</option>
+            ${groups.map(group => `
+              <option value="${group.group_id}" ${String(filters.groupId) === String(group.group_id) ? 'selected' : ''}>
+                ${esc(group.group_name)}
+              </option>`).join('')}
+          </select>
+        </label>
+        <label>
+          Project
+          <select id="metrics-project-filter">
+            <option value="">All projects</option>
+            ${projects.map(project => `
+              <option value="${project.id}" ${String(filters.projectId) === String(project.id) ? 'selected' : ''}>
+                ${esc(project.namespace ? `${project.namespace} / ${project.name}` : project.name)}
+              </option>`).join('')}
+          </select>
+        </label>
+        <label>
+          Window
+          <select id="metrics-days-filter">
+            ${[7, 14, 30, 60, 90, 180, 365].map(days => `
+              <option value="${days}" ${Number(filters.days) === days ? 'selected' : ''}>${days} days</option>`).join('')}
+          </select>
+        </label>
+        <label>
+          Branch
+          <input id="metrics-branch-filter" type="search" value="${esc(filters.branch || '')}" placeholder="Any branch">
+        </label>
+      </div>
+    </div>
+
+    <div class="metrics-kpis">
+      ${metricKpi('Jobs', summary.job_count ?? 0, statusLine(summary.job_status_counts))}
+      ${metricKpi('Pipelines', summary.pipeline_count ?? 0, statusLine(summary.pipeline_status_counts))}
+      ${metricKpi('Avg job length', formatDuration(duration.avg), `min ${formatDuration(duration.min)} / max ${formatDuration(duration.max)}`)}
+      ${metricKpi('Coverage', formatPercent(summary.coverage_avg), 'average reported coverage')}
+      ${metricKpi('Tests', tests.total ?? 0, `${tests.success ?? 0} passed / ${tests.failed ?? 0} failed`)}
+    </div>
+
+    <div class="metrics-grid">
+      <div class="card metrics-card">
+        <div class="card-header">
+          <span>Job duration trend</span>
+          <span>avg with min/max range</span>
+        </div>
+        <div class="metrics-chart">${durationChart(data.trends ?? [])}</div>
+      </div>
+      <div class="card metrics-card">
+        <div class="card-header">
+          <span>Status by day</span>
+          <span>passed vs failed jobs</span>
+        </div>
+        <div class="metrics-chart">${statusChart(data.trends ?? [])}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span>Recent pipelines</span>
+        <span>${data.recent_pipelines?.length ?? 0} shown</span>
+      </div>
+      ${recentPipelinesTable(data.recent_pipelines ?? [])}
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span>Slowest job names</span>
+        <span>average duration</span>
+      </div>
+      ${jobsByNameTable(data.jobs_by_name ?? [])}
+    </div>
+  `
+
+  const emit = () => onFilterChange({
+    groupId: document.getElementById('metrics-group-filter')?.value || '',
+    projectId: document.getElementById('metrics-project-filter')?.value || '',
+    days: document.getElementById('metrics-days-filter')?.value || '30',
+    branch: document.getElementById('metrics-branch-filter')?.value.trim() || '',
+  })
+
+  document.getElementById('metrics-group-filter')?.addEventListener('change', () => {
+    document.getElementById('metrics-project-filter').value = ''
+    emit()
+  })
+  document.getElementById('metrics-project-filter')?.addEventListener('change', emit)
+  document.getElementById('metrics-days-filter')?.addEventListener('change', emit)
+  document.getElementById('metrics-branch-filter')?.addEventListener('input', debounceEvent(emit, 350))
+}
+
 /**
  * Render the full project detail view — header + pipeline table + jobs placeholder.
  * Returns a cleanup function (no-op here, useful for future event listener cleanup).
@@ -375,4 +497,136 @@ export function renderSyncProgress(syncStatuses) {
     </svg>
     <span>${esc(msg)}</span>
   `
+}
+
+function metricKpi(label, value, detail) {
+  return `
+    <div class="metric-kpi">
+      <div class="metric-kpi-label">${esc(label)}</div>
+      <div class="metric-kpi-value">${esc(value)}</div>
+      <div class="metric-kpi-detail">${esc(detail || '')}</div>
+    </div>`
+}
+
+function statusLine(counts = {}) {
+  return `${counts.success ?? 0} passed / ${counts.failed ?? 0} failed`
+}
+
+function formatPercent(value) {
+  return value == null ? '-' : `${value.toFixed(1)}%`
+}
+
+function durationChart(trends) {
+  if (!trends.length) return `<div class="jobs-placeholder">No metric data in this window</div>`
+  const width = 720
+  const height = 220
+  const pad = 26
+  const max = Math.max(...trends.map(row => row.duration?.max ?? 0), 1)
+  const x = index => trends.length === 1
+    ? width / 2
+    : pad + (index * (width - pad * 2)) / (trends.length - 1)
+  const y = value => height - pad - ((value ?? 0) / max) * (height - pad * 2)
+
+  const points = trends.map((row, index) => `${x(index)},${y(row.duration?.avg)}`).join(' ')
+  const ranges = trends.map((row, index) => `
+    <line x1="${x(index)}" y1="${y(row.duration?.min)}" x2="${x(index)}" y2="${y(row.duration?.max)}" class="chart-range"/>
+    <circle cx="${x(index)}" cy="${y(row.duration?.avg)}" r="3" class="chart-point">
+      <title>${esc(row.date)} avg ${esc(formatDuration(row.duration?.avg))}</title>
+    </circle>`).join('')
+
+  return `
+    <svg class="trend-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Job duration trend">
+      <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" class="chart-axis"/>
+      <polyline points="${points}" class="chart-line"/>
+      ${ranges}
+    </svg>`
+}
+
+function statusChart(trends) {
+  if (!trends.length) return `<div class="jobs-placeholder">No status data in this window</div>`
+  const width = 720
+  const height = 220
+  const pad = 26
+  const gap = 5
+  const barWidth = Math.max(8, ((width - pad * 2) / trends.length) - gap)
+  const max = Math.max(...trends.map(row => (row.success ?? 0) + (row.failed ?? 0)), 1)
+
+  const bars = trends.map((row, index) => {
+    const barX = pad + index * (barWidth + gap)
+    const successHeight = ((row.success ?? 0) / max) * (height - pad * 2)
+    const failedHeight = ((row.failed ?? 0) / max) * (height - pad * 2)
+    const failedY = height - pad - failedHeight
+    const successY = failedY - successHeight
+    return `
+      <rect x="${barX}" y="${successY}" width="${barWidth}" height="${successHeight}" class="chart-bar-success"/>
+      <rect x="${barX}" y="${failedY}" width="${barWidth}" height="${failedHeight}" class="chart-bar-failed">
+        <title>${esc(row.date)} ${row.success ?? 0} passed / ${row.failed ?? 0} failed</title>
+      </rect>`
+  }).join('')
+
+  return `
+    <svg class="trend-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Job status trend">
+      <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" class="chart-axis"/>
+      ${bars}
+    </svg>`
+}
+
+function recentPipelinesTable(pipelines) {
+  if (!pipelines.length) return `<div class="jobs-placeholder">No pipelines with cached jobs in this window</div>`
+  return `
+    <div class="table-wrap">
+      <table class="pipeline-table">
+        <thead>
+          <tr>
+            <th>Pipeline</th>
+            <th>Project</th>
+            <th>Status</th>
+            <th>Jobs</th>
+            <th>Avg job</th>
+            <th>Tests</th>
+            <th>Coverage</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${pipelines.map(pipe => `
+            <tr>
+              <td><span class="pipeline-id">#${pipe.id}</span></td>
+              <td>
+                <div class="project-name">${esc(pipe.project_name)}</div>
+                <div class="project-ns">${esc(pipe.namespace)} / ${esc(pipe.ref || '')}</div>
+              </td>
+              <td><span class="badge status-${esc(pipe.status)}">${statusIcon(pipe.status)} ${esc(pipe.status)}</span></td>
+              <td>${pipe.job_count} (${pipe.job_status_counts?.success ?? 0}/${pipe.job_status_counts?.failed ?? 0})</td>
+              <td><span class="duration-text">${formatDuration(pipe.job_duration?.avg)}</span></td>
+              <td>${pipe.tests?.total ?? '-'} (${pipe.tests?.success ?? 0}/${pipe.tests?.failed ?? 0})</td>
+              <td>${formatPercent(pipe.coverage)}</td>
+              <td><span class="date-text">${formatDate(pipe.created_at)}</span></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`
+}
+
+function jobsByNameTable(jobs) {
+  if (!jobs.length) return `<div class="jobs-placeholder">No jobs found in this window</div>`
+  return `
+    <div class="jobs-rank">
+      ${jobs.map(job => `
+        <div class="job-rank-row">
+          <div>
+            <div class="job-name">${esc(job.name)}</div>
+            <div class="project-ns">${job.count} runs - ${job.status_counts?.success ?? 0} passed / ${job.status_counts?.failed ?? 0} failed</div>
+          </div>
+          <div class="duration-text">${formatDuration(job.duration?.avg)}</div>
+        </div>`).join('')}
+    </div>`
+}
+
+function debounceEvent(callback, wait) {
+  let timeout
+  return () => {
+    clearTimeout(timeout)
+    timeout = setTimeout(callback, wait)
+  }
 }

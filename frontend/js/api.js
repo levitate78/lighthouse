@@ -170,6 +170,21 @@ export async function fetchJobs(pipelineId) {
 }
 
 /**
+ * Fetch aggregate pipeline job metrics.
+ * @param {{groupId?: number|string, projectId?: number|string, days?: number|string, branch?: string}} filters
+ * @returns {Promise<object>}
+ */
+export async function fetchJobMetrics(filters = {}) {
+  const params = new URLSearchParams()
+  if (filters.groupId) params.set('group_id', filters.groupId)
+  if (filters.projectId) params.set('project_id', filters.projectId)
+  if (filters.days) params.set('days', filters.days)
+  if (filters.branch) params.set('branch', filters.branch)
+  const query = params.toString()
+  return get(`/api/job-metrics${query ? `?${query}` : ''}`)
+}
+
+/**
  * Fetch user's selected groups.
  * @returns {Promise<Array>}
  */

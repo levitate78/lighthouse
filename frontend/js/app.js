@@ -11,6 +11,7 @@ import {
   fetchProjects,
   fetchPipelines,
   fetchJobs,
+  fetchJobMetrics,
   triggerSync,
   fetchUserGroups,
   addUserGroup,
@@ -31,6 +32,9 @@ import {
   renderMainEmpty,
   renderMainLoading,
   renderMainError,
+  renderMetricsLoading,
+  renderMetricsPage,
+  renderMetricsError,
   renderProjectDetail,
   renderJobsLoading,
   renderJobs,
@@ -62,6 +66,15 @@ const state = {
   statusFilter: null,
   /** @type {string} */
   searchQuery: '',
+  /** @type {'projects'|'metrics'} */
+  currentPage: 'projects',
+  /** @type {{groupId: string, projectId: string, days: string, branch: string}} */
+  metricsFilters: {
+    groupId: '',
+    projectId: '',
+    days: '30',
+    branch: '',
+  },
   /** @type {boolean} */
   wasSyncing: false,
 }
@@ -141,6 +154,7 @@ async function boot() {
   }
 
   renderMainEmpty()
+  updatePageButtons()
   await refreshAll()
 
   // Start polling sync status immediately, and then every 3 seconds
@@ -190,6 +204,12 @@ async function boot() {
 
   document.getElementById('sync-btn')
     ?.addEventListener('click', handleSync)
+
+  document.getElementById('projects-page-btn')
+    ?.addEventListener('click', () => switchPage('projects'))
+
+  document.getElementById('metrics-page-btn')
+    ?.addEventListener('click', () => switchPage('metrics'))
 
   document.getElementById('logout-btn')
     ?.addEventListener('click', () => { window.location.href = '/logout' })
@@ -257,7 +277,9 @@ async function checkSyncStatus() {
 
 async function refreshAll() {
   await Promise.allSettled([refreshSummary(), refreshProjects()])
-  if (state.activeProject) {
+  if (state.currentPage === 'metrics') {
+    await refreshMetrics()
+  } else if (state.activeProject) {
     await loadProjectDetail(state.activeProject.id)
   }
 }
@@ -311,8 +333,47 @@ async function refreshProjects() {
 function selectProject(project) {
   state.activeProject = project
   state.activePipelineId = null
+  state.currentPage = 'projects'
+  updatePageButtons()
   renderSidebar(state.projects, project.id, selectProject)
   loadProjectDetail(project.id)
+}
+
+function switchPage(page) {
+  state.currentPage = page
+  updatePageButtons()
+  if (page === 'metrics') {
+    state.activeProject = null
+    state.activePipelineId = null
+    renderSidebar(state.projects, null, selectProject)
+    refreshMetrics()
+  } else {
+    renderMainEmpty()
+  }
+}
+
+function updatePageButtons() {
+  document.getElementById('projects-page-btn')
+    ?.classList.toggle('btn--active', state.currentPage === 'projects')
+  document.getElementById('metrics-page-btn')
+    ?.classList.toggle('btn--active', state.currentPage === 'metrics')
+}
+
+async function refreshMetrics(nextFilters = null) {
+  if (nextFilters) {
+    state.metricsFilters = {
+      ...state.metricsFilters,
+      ...nextFilters,
+    }
+  }
+
+  renderMetricsLoading()
+  try {
+    const metrics = await fetchJobMetrics(state.metricsFilters)
+    renderMetricsPage(metrics, state.metricsFilters, refreshMetrics)
+  } catch (err) {
+    if (!err.message.includes('redirecting')) renderMetricsError(err.message)
+  }
 }
 
 async function loadProjectDetail(projectId) {

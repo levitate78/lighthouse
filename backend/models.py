@@ -163,6 +163,13 @@ class Pipeline(db.Model):
     finished_at = db.Column(db.DateTime(timezone=True))
     duration = db.Column(db.Float, nullable=True)
     queued_duration = db.Column(db.Float, nullable=True)
+    coverage = db.Column(db.Float, nullable=True)
+    test_total = db.Column(db.Integer, nullable=True)
+    test_success = db.Column(db.Integer, nullable=True)
+    test_failed = db.Column(db.Integer, nullable=True)
+    test_skipped = db.Column(db.Integer, nullable=True)
+    test_error = db.Column(db.Integer, nullable=True)
+    test_duration = db.Column(db.Float, nullable=True)
 
     project = db.relationship("Project", back_populates="pipelines")
     jobs = db.relationship(
@@ -184,6 +191,13 @@ class Pipeline(db.Model):
             "finished_at": self.finished_at.isoformat() if self.finished_at else None,
             "duration": self.duration,
             "queued_duration": self.queued_duration,
+            "coverage": self.coverage,
+            "test_total": self.test_total,
+            "test_success": self.test_success,
+            "test_failed": self.test_failed,
+            "test_skipped": self.test_skipped,
+            "test_error": self.test_error,
+            "test_duration": self.test_duration,
         }
 
 
@@ -199,6 +213,7 @@ class PipelineJob(db.Model):
     status = db.Column(db.String(64), default="unknown")
     web_url = db.Column(db.String(1024), default="")
     duration = db.Column(db.Float, nullable=True)
+    coverage = db.Column(db.Float, nullable=True)
     started_at = db.Column(db.DateTime(timezone=True))
     finished_at = db.Column(db.DateTime(timezone=True))
     runner_name = db.Column(db.String(512), default="")
@@ -214,6 +229,7 @@ class PipelineJob(db.Model):
             "status": self.status,
             "web_url": self.web_url,
             "duration": self.duration,
+            "coverage": self.coverage,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "finished_at": self.finished_at.isoformat() if self.finished_at else None,
             "runner_name": self.runner_name,

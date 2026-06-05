@@ -19,6 +19,24 @@ def _parse_dt(value):
         return None
 
 
+def _to_float(value):
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_int(value):
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _get_flask_app():
     try:
         return current_app._get_current_object()
@@ -43,24 +61,67 @@ def _upsert_pipeline(pipe_data, project_id):
     pipeline.finished_at = _parse_dt(pipe_data.get("finished_at"))
     pipeline.duration = pipe_data.get("duration")
     pipeline.queued_duration = pipe_data.get("queued_duration")
+    pipeline.coverage = _to_float(pipe_data.get("coverage"))
     return pipeline
+
+
+def _extract_test_summary(summary_data):
+    total = summary_data.get("total") if isinstance(summary_data, dict) else None
+    if not isinstance(total, dict):
+        return {}
+
+    return {
+        "test_total": _to_int(total.get("count") or total.get("total")),
+        "test_success": _to_int(total.get("success")),
+        "test_failed": _to_int(total.get("failed")),
+        "test_skipped": _to_int(total.get("skipped")),
+        "test_error": _to_int(total.get("error")),
+        "test_duration": _to_float(total.get("time")),
+    }
+
+
+def _fetch_pipeline_test_summary(gl, project_id, pipeline_id):
+    try:
+        summary = gl.http_get(
+            f"/projects/{project_id}/pipelines/{pipeline_id}/test_report_summary"
+        )
+        return _extract_test_summary(summary)
+    except Exception as exc:
+        logger.debug(
+            "No test report summary for project %s pipeline %s: %s",
+            project_id,
+            pipeline_id,
+            exc,
+        )
+        return {}
 
 
 def _fetch_jobs_for_pipeline(gl,project_id,pipeline_id):
     try:
         project = gl.projects.get(project_id)
         pipeline = project.pipelines.get(pipeline_id)
-        jobs = pipeline.jobs.list(per_page=50)
+        jobs = pipeline.jobs.list(per_page=100, get_all=True)
+        pipeline_metrics = {
+            "coverage": _to_float(pipeline.asdict().get("coverage")),
+            **_fetch_pipeline_test_summary(gl, project_id, pipeline_id),
+        }
 
-        return pipeline_id, [job.asdict() for job in jobs]
+        return pipeline_id, [job.asdict() for job in jobs], pipeline_metrics
     except Exception as e:
         logger.warning('Failed to fetch jobs for project %s pipeline %s: %s ',
                        project_id,
                        pipeline_id,
                        e)
-        return pipeline_id, []
+        return pipeline_id, [], {}
 
-def _sync_jobs_for_pipeline(pipeline_id, jobs_data):
+def _sync_jobs_for_pipeline(pipeline_id, jobs_data, pipeline_metrics=None):
+    if pipeline_metrics:
+        pipeline = db.session.get(Pipeline, pipeline_id)
+        if pipeline:
+            for key, value in pipeline_metrics.items():
+                if hasattr(pipeline, key):
+                    setattr(pipeline, key, value)
+
     PipelineJob.query.filter_by(pipeline_id=pipeline_id).delete()
     for job_data in jobs_data:
         job_obj = PipelineJob(
@@ -71,6 +132,7 @@ def _sync_jobs_for_pipeline(pipeline_id, jobs_data):
             status=job_data.get("status", "unknown"),
             web_url=job_data.get("web_url", ""),
             duration=job_data.get("duration"),
+            coverage=_to_float(job_data.get("coverage")),
             started_at=_parse_dt(job_data.get("started_at")),
             finished_at=_parse_dt(job_data.get("finished_at")),
             runner_name=job_data.get("runner", {}).get("description", "")
@@ -143,8 +205,8 @@ def _background_sync_older_pipelines(group_ids, user_token):
 
                                 for future in as_completed(futures):
                                     try:
-                                        pipeline_id, jobs_data = future.result(timeout=15)
-                                        _sync_jobs_for_pipeline(pipeline_id, jobs_data)
+                                        pipeline_id, jobs_data, metrics = future.result(timeout=15)
+                                        _sync_jobs_for_pipeline(pipeline_id, jobs_data, metrics)
                                     except Exception as e:
                                         logger.warning('Parallel job fetch failed for project %s:%s', proj_data["id"], e)
 
@@ -303,8 +365,8 @@ def sync_pipelines(group_ids=None, background=False, user_token=None):
 
                                 for future in as_completed(futures):
                                     try:
-                                        pipeline_id, jobs_data = future.result(timeout=15)
-                                        _sync_jobs_for_pipeline(pipeline_id,jobs_data)
+                                        pipeline_id, jobs_data, metrics = future.result(timeout=15)
+                                        _sync_jobs_for_pipeline(pipeline_id,jobs_data,metrics)
                                     except Exception as e:
                                         logger.warning('Parallel job fetch failed for project %s:%s', proj_data["id"],e)
 
