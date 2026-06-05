@@ -37,6 +37,8 @@ services:
       FLASK_DEBUG: "false"
       SESSION_COOKIE_SECURE: "true"
       VITE_DEV_SERVER: ""
+      PYTHONBUFFERED: 1
+      FIRST_ADMIN_PASSWORD: password123
     depends_on:
       db:
         condition: service_healthy

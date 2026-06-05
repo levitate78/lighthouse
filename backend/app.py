@@ -11,6 +11,7 @@ from flask import Flask, render_template
 from flask_login import login_required
 from flask_dance.contrib.gitlab import make_gitlab_blueprint
 from flask_wtf import CSRFProtect
+from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash
 
 from config import Config
@@ -22,6 +23,9 @@ from models import User
 
 _scheduler_lock_fd = None
 
+logging.basicConfig(level=logging.DEBUG,format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
+logger.debug('Logging successfully configured.')
 
 def _acquire_scheduler_lock() -> bool:
     """Acquire a non-blocking file lock so only one process runs the scheduler."""
@@ -62,11 +66,10 @@ def _should_start_scheduler() -> bool:
 
 
 def create_app():
+    logger.debug('Creating App')
     app = Flask(__name__)
     app.config.from_object(Config)
     app.config["WTF_CSRF_ENABLED"] = True
-
-    logging.basicConfig(level=logging.INFO)
 
     db.init_app(app)
     scheduler_was_running = scheduler.running
@@ -78,14 +81,14 @@ def create_app():
     csrf = CSRFProtect(app)  # noqa: F841
     login_manager.login_view = "auth.login"
     login_manager.user_loader(load_user)
-
+    logger.debug('Creating GitLab Blueprint')
     gitlab_bp = make_gitlab_blueprint(
         client_id=app.config["GITLAB_OAUTH_CLIENT_ID"],
         client_secret=app.config["GITLAB_OAUTH_CLIENT_SECRET"],
         hostname=app.config["GITLAB_URL"],
         redirect_to="gitlab_login",
     )
-
+    logger.debug('Registering Blueprints')
     app.register_blueprint(gitlab_bp, url_prefix="/login")
     app.register_blueprint(auth_bp)
     app.register_blueprint(api_bp)
@@ -143,7 +146,9 @@ def create_app():
     #   - `flask init-db`         for local development without Docker
     #   - conftest.py             calls db.create_all() directly for tests
     with app.app_context():
-        _seed_admin_user(app)
+        if _should_seed():
+            logger.debug('Checking admin user status...')
+            _seed_admin_user(app)
 
     # ── Background scheduler ───────────────────────────────────────────────
     if not scheduler_was_running:
@@ -160,40 +165,40 @@ def create_app():
 
     return app
 
+def _should_seed():
+    return _acquire_scheduler_lock()
 
 def _seed_admin_user(app: Flask) -> None:
     """Create a default admin account if no users exist yet."""
     try:
-        if not User.query.first():
-            admin_password = os.getenv("FIRST_ADMIN_PASSWORD")
-            if not admin_password:
-                raise KeyError(
-                    "Environment variable FIRST_ADMIN_PASSWORD must be set to create the initial admin user."
-                )
-            admin_user = User(
-                username="admin",
-                name="Administrator",
-                email="admin@localhost",
-                password_hash=generate_password_hash(admin_password),
-                provider="local",
-                password_change_required=True,
-                approved=True,
-                is_admin=True,
+        existing_admin = User.query.filter_by(username="admin")
+        admin_password = os.getenv("FIRST_ADMIN_PASSWORD")
+        if existing_admin:
+            logger.debug('Admin user found; not creating')
+        admin_password = os.getenv('FIRST_ADMIN_PASSWORD')
+        if not admin_password:
+            raise KeyError(
+                "Environment variable FIRST_ADMIN_PASSWORD must be set to create the initial admin user."
             )
-            db.session.add(admin_user)
-            db.session.commit()
-            app.logger.warning(
-                'Admin user created with username "admin" and password: %s. '
-                "Please change this password after first login.",
-                admin_password,
-            )
-            print("\nAdmin user created with specified password.")
-            print("Please change the password after first login.\n")
-    except Exception:
+        admin_user = User(
+            username="admin",
+            name="Administrator",
+            email="admin@localhost",
+            password_hash=generate_password_hash(admin_password),
+            provider="local",
+            password_change_required=True,
+            approved=True,
+            is_admin=True,
+        )
+        db.session.add(admin_user)
+        db.session.commit()
+        logger.debug('Admin user created.')
+    except Exception as e:
         # Tables may not exist yet (first run before migrations).
         # The entrypoint will run alembic upgrade head before starting gunicorn,
         # so this is a no-op during container startup sequencing.
         db.session.rollback()
+        logger.error(e)
 
 
 # ── CLI helpers ────────────────────────────────────────────────────────────

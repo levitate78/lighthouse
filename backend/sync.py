@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone
 from threading import Thread
 from flask import current_app
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from extensions import db, scheduler
 from gitlab_utils import get_gitlab_client
 from models import Project, Pipeline, PipelineJob, UserSelectedGroup
@@ -46,13 +46,23 @@ def _upsert_pipeline(pipe_data, project_id):
     return pipeline
 
 
-def _sync_jobs_for_pipeline(project_id, pipeline_id, gl):
-    jobs = (
-        gl.projects.get(project_id).pipelines.get(pipeline_id).jobs.list(get_all=True)
-    )
+def _fetch_jobs_for_pipeline(gl,project_id,pipeline_id):
+    try:
+        project = gl.projects.get(project_id)
+        pipeline = project.pipelines.get(pipeline_id)
+        jobs = pipeline.jobs.list(per_page=50)
+
+        return pipeline_id, [job.asdict() for job in jobs]
+    except Exception as e:
+        logger.warning('Failed to fetch jobs for project %s pipeline %s: %s ',
+                       project_id,
+                       pipeline_id,
+                       e)
+        return pipeline_id, []
+
+def _sync_jobs_for_pipeline(pipeline_id, jobs_data):
     PipelineJob.query.filter_by(pipeline_id=pipeline_id).delete()
-    for job in jobs:
-        job_data = job.asdict()
+    for job_data in jobs_data:
         job_obj = PipelineJob(
             id=job_data["id"],
             pipeline_id=pipeline_id,
@@ -70,13 +80,13 @@ def _sync_jobs_for_pipeline(project_id, pipeline_id, gl):
         db.session.add(job_obj)
 
 
-def _background_sync_older_pipelines(group_ids):
+def _background_sync_older_pipelines(group_ids, user_token):
     app = _get_flask_app()
     if app is None:
         return
 
     with app.app_context():
-        gl = get_gitlab_client()
+        gl = get_gitlab_client(private_token=user_token)
 
         for group_id in group_ids:
             try:
@@ -111,16 +121,16 @@ def _background_sync_older_pipelines(group_ids):
         db.session.remove()
 
 
-def _start_background_sync(group_ids):
+def _start_background_sync(group_ids,user_token):
     thread = Thread(
         target=_background_sync_older_pipelines,
-        args=(group_ids,),
+        args=(group_ids,user_token),
         daemon=True,
     )
     thread.start()
 
 
-def sync_pipelines(group_ids=None, background=False):
+def sync_pipelines(group_ids=None, background=False, user_token=None):
     results = {"success": True, "failures": []}
     app = _get_flask_app()
     if app is None:
@@ -129,7 +139,7 @@ def sync_pipelines(group_ids=None, background=False):
         )
 
     with app.app_context():
-        gl = get_gitlab_client()
+        gl = get_gitlab_client(private_token=user_token)
 
         if group_ids is None:
             selected_groups = (
@@ -167,15 +177,37 @@ def sync_pipelines(group_ids=None, background=False):
                             per_page=10, get_all=False
                         )
                         recent_pipeline_id = pipelines[0].id if pipelines else None
+                        MAX_WORKERS = 5
 
+                        pipeline_ids = []
                         for pipe in pipelines:
                             pipe_data = pipe.asdict()
                             _upsert_pipeline(pipe_data, proj_data["id"])
+                            pipeline_ids.append(pipe.id)
+                            
+                        target_pipeline_ids = (
+                            [recent_pipeline_id] if recent_pipeline_id else []
+                        )
 
-                            if recent_pipeline_id and pipe.id == recent_pipeline_id:
-                                _sync_jobs_for_pipeline(
-                                    proj_data["id"], pipe_data["id"], gl
-                                )
+                        if target_pipeline_ids:
+                            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                                futures = [
+                                    executor.submit(
+                                        _fetch_jobs_for_pipeline,
+                                        gl,
+                                        proj_data["id"],
+                                        pid,
+                                    )
+                                    for pid in target_pipeline_ids
+                                ]
+
+                                for future in as_completed(futures):
+                                    try:
+                                        pipeline_id, jobs_data = future.result(timeout=15)
+                                        _sync_jobs_for_pipeline(pipeline_id,jobs_data)
+                                    except Exception as e:
+                                        logger.warning('Parallel job fetch failed for project %s:%s', proj_data["id"],e)
+
                     db.session.commit()
                     logger.info("Sync complete for group %s.", group_id)
                 except Exception as exc:
@@ -196,7 +228,7 @@ def sync_pipelines(group_ids=None, background=False):
             results["failures"].append({"error": "Sync operation failed."})
 
     if background and results["success"]:
-        _start_background_sync(group_ids)
+        _start_background_sync(group_ids,user_token)
 
     return results
 
