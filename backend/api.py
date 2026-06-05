@@ -8,7 +8,7 @@ from flask_dance.contrib.gitlab import gitlab as gitlab_dance
 from flask_wtf.csrf import generate_csrf
 
 from extensions import db, limiter
-from gitlab_utils import get_gitlab_client
+from gitlab_utils import get_gitlab_client, decrypt_token
 from models import User, Project, Pipeline, PipelineJob, UserSelectedGroup
 from sync import sync_pipelines
 
@@ -373,11 +373,12 @@ def api_summary():
 
 @api_bp.route("/api/sync", methods=["POST"])
 @login_required
-@limiter.limit("1 per minute")
+@limiter.limit("1 per second")
 def api_sync():
     group_ids = [g.group_id for g in current_user.selected_groups if g.group_id]
     if not group_ids:
         return jsonify({"error": "No groups selected"}), 400
+    token = decrypt_token(current_user.gitlab_token)
     result = sync_pipelines(group_ids=group_ids, background=True)
     if result["success"]:
         return jsonify(
