@@ -128,15 +128,17 @@ export async function fetchSummary() {
 /**
  * Fetch all cached projects (each includes their latest pipeline inline).
  * Iterates through all pages to return the complete list.
+ * @param {string} [branch='']
  * @returns {Promise<Array>}
  */
-export async function fetchProjects() {
+export async function fetchProjects(branch = '') {
   const perPage = 200
   let page = 1
   const allProjects = []
+  const branchParam = branch ? `&branch=${encodeURIComponent(branch)}` : ''
 
   while (true) {
-    const response = await get(`/api/projects?page=${page}&per_page=${perPage}`)
+    const response = await get(`/api/projects?page=${page}&per_page=${perPage}${branchParam}`)
     allProjects.push(...response.projects)
 
     if (page >= response.pages || response.projects.length === 0) break
@@ -150,10 +152,12 @@ export async function fetchProjects() {
  * Fetch recent pipelines for a single project.
  * @param {number} projectId
  * @param {number} [limit=15]
+ * @param {string} [branch='']
  * @returns {Promise<Array>}
  */
-export async function fetchPipelines(projectId, limit = 15) {
-  return get(`/api/projects/${projectId}/pipelines?limit=${limit}`)
+export async function fetchPipelines(projectId, limit = 15, branch = '') {
+  const branchParam = branch ? `&branch=${encodeURIComponent(branch)}` : ''
+  return get(`/api/projects/${projectId}/pipelines?limit=${limit}${branchParam}`)
 }
 
 /**
@@ -163,6 +167,22 @@ export async function fetchPipelines(projectId, limit = 15) {
  */
 export async function fetchJobs(pipelineId) {
   return get(`/api/pipelines/${pipelineId}/jobs`)
+}
+
+/**
+ * Fetch aggregate pipeline job metrics.
+ * @param {{groupId?: number|string, projectId?: number|string, days?: number|string, branch?: string}} filters
+ * @returns {Promise<object>}
+ */
+export async function fetchJobMetrics(filters = {}) {
+  const params = new URLSearchParams()
+  if (filters.groupId) params.set('group_id', filters.groupId)
+  if (filters.projectId) params.set('project_id', filters.projectId)
+  if (filters.days) params.set('days', filters.days)
+  if (filters.branch) params.set('branch', filters.branch)
+  if (filters.jobName) params.set('job_name', filters.jobName)
+  const query = params.toString()
+  return get(`/api/job-metrics${query ? `?${query}` : ''}`)
 }
 
 /**
@@ -257,4 +277,12 @@ export async function rejectUser(userId) {
  */
 export async function fetchAdminUsers() {
   return get('/api/admin/users')
+}
+
+/**
+ * Fetch active sync status.
+ * @returns {Promise<Array>}
+ */
+export async function fetchSyncStatus() {
+  return get('/api/sync/status')
 }

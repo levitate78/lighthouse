@@ -6,7 +6,7 @@ alembic upgrade head
 
 echo "Starting Gunicorn..."
 exec gunicorn \
-  --log-devel debug \
+  --log-level debug \
   --workers 2 \
   --bind 0.0.0.0:5000 \
   --timeout 120 \

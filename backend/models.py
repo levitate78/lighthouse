@@ -122,8 +122,15 @@ class Project(db.Model):
             .first()
         )
 
-    def to_dict(self):
-        latest = self.latest_pipeline()
+    def to_dict(self, branch=None):
+        if branch:
+            latest = (
+                Pipeline.query.filter(Pipeline.project_id == self.id, Pipeline.ref.ilike(f"%{branch}%"))
+                .order_by(Pipeline.created_at.desc())
+                .first()
+            )
+        else:
+            latest = self.latest_pipeline()
         return {
             "id": self.id,
             # group_id is included so the frontend can filter projects when a
@@ -156,6 +163,13 @@ class Pipeline(db.Model):
     finished_at = db.Column(db.DateTime(timezone=True))
     duration = db.Column(db.Float, nullable=True)
     queued_duration = db.Column(db.Float, nullable=True)
+    coverage = db.Column(db.Float, nullable=True)
+    test_total = db.Column(db.Integer, nullable=True)
+    test_success = db.Column(db.Integer, nullable=True)
+    test_failed = db.Column(db.Integer, nullable=True)
+    test_skipped = db.Column(db.Integer, nullable=True)
+    test_error = db.Column(db.Integer, nullable=True)
+    test_duration = db.Column(db.Float, nullable=True)
 
     project = db.relationship("Project", back_populates="pipelines")
     jobs = db.relationship(
@@ -177,6 +191,13 @@ class Pipeline(db.Model):
             "finished_at": self.finished_at.isoformat() if self.finished_at else None,
             "duration": self.duration,
             "queued_duration": self.queued_duration,
+            "coverage": self.coverage,
+            "test_total": self.test_total,
+            "test_success": self.test_success,
+            "test_failed": self.test_failed,
+            "test_skipped": self.test_skipped,
+            "test_error": self.test_error,
+            "test_duration": self.test_duration,
         }
 
 
@@ -192,6 +213,7 @@ class PipelineJob(db.Model):
     status = db.Column(db.String(64), default="unknown")
     web_url = db.Column(db.String(1024), default="")
     duration = db.Column(db.Float, nullable=True)
+    coverage = db.Column(db.Float, nullable=True)
     started_at = db.Column(db.DateTime(timezone=True))
     finished_at = db.Column(db.DateTime(timezone=True))
     runner_name = db.Column(db.String(512), default="")
@@ -207,7 +229,39 @@ class PipelineJob(db.Model):
             "status": self.status,
             "web_url": self.web_url,
             "duration": self.duration,
+            "coverage": self.coverage,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "finished_at": self.finished_at.isoformat() if self.finished_at else None,
             "runner_name": self.runner_name,
+        }
+
+
+class SyncProgress(db.Model):
+    __tablename__ = "sync_progress"
+
+    group_id = db.Column(db.BigInteger, primary_key=True)
+    group_name = db.Column(db.String(255), default="")
+    status = db.Column(db.String(64), default="idle")  # idle, syncing, syncing_history, completed, failed
+    total_projects = db.Column(db.Integer, default=0)
+    current_project = db.Column(db.Integer, default=0)
+    total_pipelines = db.Column(db.Integer, default=0)
+    current_pipeline = db.Column(db.Integer, default=0)
+    message = db.Column(db.String(512), default="")
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    def to_dict(self):
+        return {
+            "group_id": self.group_id,
+            "group_name": self.group_name,
+            "status": self.status,
+            "total_projects": self.total_projects,
+            "current_project": self.current_project,
+            "total_pipelines": self.total_pipelines,
+            "current_pipeline": self.current_pipeline,
+            "message": self.message,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

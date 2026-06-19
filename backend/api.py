@@ -1,5 +1,6 @@
 import gitlab
-from datetime import datetime, timezone
+from collections import defaultdict
+from datetime import datetime, timezone, timedelta
 from functools import wraps
 
 from flask import Blueprint, current_app, jsonify, request
@@ -9,7 +10,7 @@ from flask_wtf.csrf import generate_csrf
 
 from extensions import db, limiter
 from gitlab_utils import get_gitlab_client, decrypt_token
-from models import User, Project, Pipeline, PipelineJob, UserSelectedGroup
+from models import User, Project, Pipeline, PipelineJob, UserSelectedGroup, SyncProgress
 from sync import sync_pipelines
 
 api_bp = Blueprint("api", __name__)
@@ -233,6 +234,7 @@ def api_projects():
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", 100, type=int)
     per_page = max(1, min(per_page, 500))
+    branch = request.args.get("branch", "").strip()
 
     if not group_ids:
         return jsonify(
@@ -245,12 +247,16 @@ def api_projects():
             }
         )
 
-    query = Project.query.filter(Project.group_id.in_(group_ids)).order_by(Project.name)
+    query = Project.query.filter(Project.group_id.in_(group_ids))
+    if branch:
+        query = query.join(Pipeline).filter(Pipeline.ref.ilike(f"%{branch}%")).distinct()
+    query = query.order_by(Project.name)
+    
     pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
     return jsonify(
         {
-            "projects": [p.to_dict() for p in pagination.items],
+            "projects": [p.to_dict(branch=branch) for p in pagination.items],
             "page": pagination.page,
             "per_page": pagination.per_page,
             "total": pagination.total,
@@ -281,9 +287,14 @@ def api_pipelines(project_id):
 
     limit = request.args.get("limit", 10, type=int)
     limit = max(1, min(limit, 100))
+    branch = request.args.get("branch", "").strip()
+
+    pipelines_query = Pipeline.query.filter_by(project_id=project_id)
+    if branch:
+        pipelines_query = pipelines_query.filter(Pipeline.ref.ilike(f"%{branch}%"))
 
     pipelines = (
-        Pipeline.query.filter_by(project_id=project_id)
+        pipelines_query
         .order_by(Pipeline.created_at.desc())
         .limit(limit)
         .all()
@@ -314,6 +325,239 @@ def api_jobs(pipeline_id):
         .all()
     )
     return jsonify([j.to_dict() for j in jobs])
+
+
+# ── Job metrics ──────────────────────────────────────────────────────────────
+
+
+def _status_counts(items):
+    counts: dict[str, int] = {}
+    for item in items:
+        status = getattr(item, "status", None) or "unknown"
+        counts[status] = counts.get(status, 0) + 1
+    return counts
+
+
+def _duration_stats(durations):
+    clean = [duration for duration in durations if duration is not None]
+    if not clean:
+        return {"avg": None, "min": None, "max": None}
+    return {
+        "avg": sum(clean) / len(clean),
+        "min": min(clean),
+        "max": max(clean),
+    }
+
+
+def _avg(values):
+    clean = [value for value in values if value is not None]
+    return (sum(clean) / len(clean)) if clean else None
+
+
+def _int_arg(name):
+    value = request.args.get(name, "").strip()
+    if not value:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _datetime_sort_value(value):
+    if value is None:
+        return 0
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.timestamp()
+
+
+@api_bp.route("/api/job-metrics")
+@login_required
+def api_job_metrics():
+    group_ids = _get_authorized_project_group_ids()
+    if not group_ids:
+        return jsonify(
+            {
+                "summary": {
+                    "job_count": 0,
+                    "pipeline_count": 0,
+                    "job_status_counts": {},
+                    "pipeline_status_counts": {},
+                    "duration": _duration_stats([]),
+                    "coverage_avg": None,
+                    "tests": {},
+                },
+                "trends": [],
+                "recent_pipelines": [],
+                "jobs_by_name": [],
+                "filters": {"groups": [], "projects": []},
+            }
+        )
+
+    requested_group_id = _int_arg("group_id")
+    requested_project_id = _int_arg("project_id")
+    days = request.args.get("days", 30, type=int)
+    days = max(1, min(days, 365))
+    branch = request.args.get("branch", "").strip()
+    job_name = request.args.get("job_name", "").strip()
+
+    active_group_ids = group_ids
+    if requested_group_id:
+        if requested_group_id not in group_ids:
+            return jsonify({"error": "Group not found"}), 404
+        active_group_ids = [requested_group_id]
+
+    project_query = Project.query.filter(Project.group_id.in_(group_ids)).order_by(
+        Project.name
+    )
+    available_projects = project_query.all()
+
+    query = (
+        db.session.query(PipelineJob, Pipeline, Project)
+        .join(Pipeline, PipelineJob.pipeline_id == Pipeline.id)
+        .join(Project, Pipeline.project_id == Project.id)
+        .filter(Project.group_id.in_(active_group_ids))
+    )
+
+    if requested_project_id:
+        project = Project.query.filter(
+            Project.id == requested_project_id,
+            Project.group_id.in_(active_group_ids),
+        ).first()
+        if not project:
+            return jsonify({"error": "Project not found"}), 404
+        query = query.filter(Project.id == requested_project_id)
+
+    if branch:
+        query = query.filter(Pipeline.ref.ilike(f"%{branch}%"))
+
+    if job_name:
+        query = query.filter(PipelineJob.name == job_name)
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    query = query.filter(Pipeline.created_at >= since)
+
+    rows = query.order_by(Pipeline.created_at.asc(), PipelineJob.name.asc()).all()
+
+    jobs = [row[0] for row in rows]
+    pipelines_by_id = {}
+    project_by_pipeline_id = {}
+    jobs_by_pipeline_id = defaultdict(list)
+    jobs_by_name = defaultdict(list)
+    trends_by_date = defaultdict(lambda: {"jobs": [], "pipelines": {}})
+
+    for job, pipeline, project in rows:
+        pipelines_by_id[pipeline.id] = pipeline
+        project_by_pipeline_id[pipeline.id] = project
+        jobs_by_pipeline_id[pipeline.id].append(job)
+        jobs_by_name[job.name or "unnamed"].append(job)
+
+        bucket = pipeline.created_at.date().isoformat() if pipeline.created_at else "unknown"
+        trends_by_date[bucket]["jobs"].append(job)
+        trends_by_date[bucket]["pipelines"][pipeline.id] = pipeline
+
+    pipelines = list(pipelines_by_id.values())
+    test_fields = ["test_total", "test_success", "test_failed", "test_skipped", "test_error"]
+    tests = {
+        field.replace("test_", ""): sum(
+            getattr(pipeline, field) or 0 for pipeline in pipelines
+        )
+        for field in test_fields
+    }
+
+    trends = []
+    for bucket, values in sorted(trends_by_date.items()):
+        bucket_jobs = values["jobs"]
+        bucket_pipelines = list(values["pipelines"].values())
+        trends.append(
+            {
+                "date": bucket,
+                "job_count": len(bucket_jobs),
+                "pipeline_count": len(bucket_pipelines),
+                "duration": _duration_stats([job.duration for job in bucket_jobs]),
+                "success": sum(1 for job in bucket_jobs if job.status == "success"),
+                "failed": sum(1 for job in bucket_jobs if job.status == "failed"),
+                "coverage_avg": _avg([pipeline.coverage for pipeline in bucket_pipelines]),
+            }
+        )
+
+    recent_pipelines = []
+    for pipeline in sorted(
+        pipelines, key=lambda p: _datetime_sort_value(p.created_at), reverse=True
+    )[:30]:
+        pipeline_jobs = jobs_by_pipeline_id[pipeline.id]
+        project = project_by_pipeline_id[pipeline.id]
+        recent_pipelines.append(
+            {
+                "id": pipeline.id,
+                "project_id": project.id,
+                "project_name": project.name,
+                "namespace": project.namespace,
+                "ref": pipeline.ref,
+                "status": pipeline.status,
+                "web_url": pipeline.web_url,
+                "created_at": pipeline.created_at.isoformat()
+                if pipeline.created_at
+                else None,
+                "duration": pipeline.duration,
+                "job_count": len(pipeline_jobs),
+                "job_status_counts": _status_counts(pipeline_jobs),
+                "job_duration": _duration_stats([job.duration for job in pipeline_jobs]),
+                "coverage": pipeline.coverage,
+                "tests": {
+                    "total": pipeline.test_total,
+                    "success": pipeline.test_success,
+                    "failed": pipeline.test_failed,
+                    "skipped": pipeline.test_skipped,
+                    "error": pipeline.test_error,
+                    "duration": pipeline.test_duration,
+                },
+            }
+        )
+
+    job_name_rows = []
+    for name, grouped_jobs in jobs_by_name.items():
+        job_name_rows.append(
+            {
+                "name": name,
+                "count": len(grouped_jobs),
+                "status_counts": _status_counts(grouped_jobs),
+                "duration": _duration_stats([job.duration for job in grouped_jobs]),
+                "coverage_avg": _avg([job.coverage for job in grouped_jobs]),
+            }
+        )
+    job_name_rows.sort(
+        key=lambda item: item["duration"]["avg"] if item["duration"]["avg"] is not None else -1,
+        reverse=True,
+    )
+
+    selected_groups = UserSelectedGroup.query.filter(
+        UserSelectedGroup.user_id == current_user.id,
+        UserSelectedGroup.group_id.in_(group_ids),
+    ).order_by(UserSelectedGroup.group_name).all()
+
+    return jsonify(
+        {
+            "summary": {
+                "job_count": len(jobs),
+                "pipeline_count": len(pipelines),
+                "job_status_counts": _status_counts(jobs),
+                "pipeline_status_counts": _status_counts(pipelines),
+                "duration": _duration_stats([job.duration for job in jobs]),
+                "coverage_avg": _avg([pipeline.coverage for pipeline in pipelines]),
+                "tests": tests,
+            },
+            "trends": trends,
+            "recent_pipelines": recent_pipelines,
+            "jobs_by_name": job_name_rows[:25],
+            "filters": {
+                "groups": [group.to_dict() for group in selected_groups],
+                "projects": [project.to_dict() for project in available_projects],
+            },
+        }
+    )
 
 
 # ── Summary ────────────────────────────────────────────────────────────────
@@ -379,7 +623,7 @@ def api_sync():
     if not group_ids:
         return jsonify({"error": "No groups selected"}), 400
     token = decrypt_token(current_user.gitlab_token)
-    result = sync_pipelines(group_ids=group_ids, background=True)
+    result = sync_pipelines(group_ids=group_ids, background=True, user_token=token)
     if result["success"]:
         return jsonify(
             {"status": "ok", "synced_at": datetime.now(timezone.utc).isoformat()}
@@ -391,6 +635,17 @@ def api_sync():
             "failures": result["failures"],
         }
     ), 207
+
+
+@api_bp.route("/api/sync/status")
+@login_required
+def api_sync_status():
+    group_ids = _get_authorized_project_group_ids()
+    if not group_ids:
+        return jsonify([])
+    
+    statuses = SyncProgress.query.filter(SyncProgress.group_id.in_(group_ids)).all()
+    return jsonify([s.to_dict() for s in statuses])
 
 
 # ── Admin ──────────────────────────────────────────────────────────────────

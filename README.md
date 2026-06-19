@@ -84,6 +84,34 @@ npm install
 
 ## Running
 
+### Docker Compose (recommended)
+
+The simplest way to run LIGHTHOUSE in production is via Docker Compose.
+The included `docker-compose.yml` orchestrates three services: PostgreSQL,
+the Flask backend, and an Nginx frontend.
+
+```bash
+# 1. Copy and configure environment variables
+cp .env.example .env
+# Edit .env — set SECRET_KEY, GLT_SECRET_KEY, POSTGRES_PASSWORD,
+#             GITLAB_URL, and GITLAB_TOKEN at minimum
+
+# 2. Build and start all services
+docker compose up --build -d
+
+# 3. Verify everything is healthy
+docker compose ps
+```
+
+The application is exposed on port **80** by default (set `HTTP_PORT` in
+`.env` to change). Database migrations run automatically on startup.
+
+To tear down:
+```bash
+docker compose down          # stop containers (data persists)
+docker compose down -v       # stop and remove volumes
+```
+
 ### Development (two terminals)
 
 **Terminal 1 — Vite dev server** (hot module replacement):
@@ -103,7 +131,7 @@ python backend/app.py
 The Flask template detects `VITE_DEV_SERVER` and loads JS/CSS from Vite's
 dev server, giving you full HMR while hitting the real Flask API.
 
-### Production
+### Manual production build
 
 ```bash
 # 1. Build the frontend — outputs hashed bundles to static/dist/
@@ -132,6 +160,7 @@ filenames into `templates/index.html` at request time.
 | `SYNC_INTERVAL_SECONDS` | GitLab poll interval                             | `60`                            |
 | `VITE_DEV_SERVER`       | Vite dev server URL (dev only, blank in prod)    | *(blank)*                       |
 | `SECRET_KEY`            | Flask secret key                                 | *(change in production)*        |
+| `SESSION_COOKIE_SECURE` | Send session cookies only over HTTPS             | `false`                         |
 | `SCHEDULER_ENABLED`     | Enable scheduler startup (`1`) for scheduler-capable processes | `0`                             |
 | `SCHEDULER_LOCK_FILE`   | File path used for inter-process scheduler lock    | `/tmp/lighthouse_scheduler.lock`|
 
@@ -139,13 +168,15 @@ filenames into `templates/index.html` at request time.
 
 ## REST API
 
-| Method | Path                                   | Description                    |
-|--------|----------------------------------------|--------------------------------|
-| GET    | `/api/projects`                        | All projects + latest pipeline |
-| GET    | `/api/projects/:id/pipelines?limit=15` | Recent pipelines for a project |
-| GET    | `/api/pipelines/:id/jobs`              | Jobs for a specific pipeline   |
-| GET    | `/api/summary`                         | Aggregate status counts        |
-| POST   | `/api/sync`                            | Trigger an immediate sync      |
+| Method | Path                                   | Description                                  |
+|--------|----------------------------------------|----------------------------------------------|
+| GET    | `/api/health`                          | Liveness probe (unauthenticated)             |
+| GET    | `/api/projects?branch=`                | All projects + latest pipeline; filter by branch |
+| GET    | `/api/projects/:id/pipelines?limit=&branch=` | Recent pipelines for a project; filter by branch |
+| GET    | `/api/pipelines/:id/jobs`              | Jobs for a specific pipeline                 |
+| GET    | `/api/summary`                         | Aggregate status counts                      |
+| POST   | `/api/sync`                            | Trigger foreground + background sync         |
+| GET    | `/api/sync/status`                     | Active sync progress for authorized groups   |
 
 ---
 
@@ -165,3 +196,24 @@ filenames into `templates/index.html` at request time.
   `Cache-Control: max-age=31536000, immutable`
 - **`static/dist/` in `.gitignore`**: commit the source in `frontend/src/`,
   not the build output; regenerate it in CI
+
+---
+
+## Documentation
+
+Full documentation (architecture, API reference, and deployment guides) is
+built with [MkDocs Material](https://squidfunk.github.io/mkdocs-material/).
+
+```bash
+# Install documentation dependencies
+pip install mkdocs mkdocs-material "mkdocstrings[python]"
+
+# Build the static documentation site
+mkdocs build
+
+# Or serve locally with live reload
+mkdocs serve
+# → http://localhost:8000
+```
+
+Documentation source lives in `docs/` and configuration is in `mkdocs.yml`.

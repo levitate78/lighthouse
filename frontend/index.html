@@ -20,6 +20,10 @@
     </svg>
     LIGHTHOUSE
   </div>
+  <nav class="topbar-nav" aria-label="Primary">
+    <button class="btn btn--active" id="projects-page-btn" type="button">Projects</button>
+    <button class="btn" id="metrics-page-btn" type="button">Metrics</button>
+  </nav>
   <div class="topbar-divider"></div>
   <span class="topbar-meta">last sync: <span id="last-sync">—</span></span>
   <div class="user-info">
@@ -42,30 +46,31 @@
 
 <!-- ── Summary bar ─────────────────────────────────────────────────────── -->
 <div class="summary-bar">
-  <div class="summary-item">
-    <span class="summary-label">Total Projects</span>
-    <span class="summary-value" id="stat-projects">—</span>
-  </div>
-  <div class="summary-item">
-    <span class="summary-label">Running</span>
-    <span class="summary-value" id="stat-running">—</span>
-  </div>
-  <div class="summary-item">
-    <span class="summary-label">Passed</span>
-    <span class="summary-value" id="stat-success">—</span>
-  </div>
-  <div class="summary-item">
-    <span class="summary-label">Failed</span>
-    <span class="summary-value" id="stat-failed">—</span>
-  </div>
-  <div class="summary-item">
-    <span class="summary-label">Skipped</span>
-    <span class="summary-value" id="stat-pending">—</span>
-  </div>
-  <div class="summary-item">
-    <span class="summary-label">Other</span>
-    <span class="summary-value" id="stat-canceled">—</span>
-  </div>
+  <button class="stat-chip" data-status="all" type="button" aria-label="Show all projects">
+    <span class="dot status-unknown"></span>
+    <span class="count" id="stat-projects">—</span> projects
+  </button>
+  <button class="stat-chip" data-status="success" type="button" aria-label="Filter passed pipelines">
+    <span class="dot status-success"></span>
+    <span class="count" id="stat-success">—</span> passed
+  </button>
+  <button class="stat-chip" data-status="failed" type="button" aria-label="Filter failed pipelines">
+    <span class="dot status-failed"></span>
+    <span class="count" id="stat-failed">—</span> failed
+  </button>
+  <button class="stat-chip" data-status="running" type="button" aria-label="Filter running pipelines">
+    <span class="dot status-running"></span>
+    <span class="count" id="stat-running">—</span> running
+  </button>
+  <button class="stat-chip" data-status="pending" type="button" aria-label="Filter pending pipelines">
+    <span class="dot status-pending"></span>
+    <span class="count" id="stat-pending">—</span> pending
+  </button>
+  <button class="stat-chip" data-status="canceled" type="button" aria-label="Filter canceled pipelines">
+    <span class="dot status-canceled"></span>
+    <span class="count" id="stat-canceled">—</span> canceled
+  </button>
+  <div id="sync-status-indicator" class="sync-status-chip" style="display: none; margin-left: auto;"></div>
 </div>
 
 <!-- ── Main content ────────────────────────────────────────────────────── -->
@@ -92,6 +97,24 @@
           Select Groups
         </button>
       </div>
+    </div>
+    <div class="sidebar-search" style="padding: 10px 14px;">
+      <input
+        id="search-input"
+        type="search"
+        placeholder="Filter projects…"
+        aria-label="Filter projects"
+        style="width: 100%; padding: 7px 10px; background: var(--bg); border: 1px solid var(--border2); border-radius: var(--radius); color: var(--text); font-family: var(--mono); font-size: 12px; outline: none; transition: var(--transition);"
+      />
+    </div>
+    <div class="sidebar-search" style="padding: 0 14px 10px; border-top: none;">
+      <input
+        id="branch-filter-input"
+        type="search"
+        placeholder="Filter by branch name…"
+        aria-label="Filter by branch"
+        style="width: 100%; padding: 7px 10px; background: var(--bg); border: 1px solid var(--border2); border-radius: var(--radius); color: var(--text); font-family: var(--mono); font-size: 12px; outline: none; transition: var(--transition);"
+      />
     </div>
     <ul id="project-list" class="project-list">
       <!-- Projects will be rendered here -->
