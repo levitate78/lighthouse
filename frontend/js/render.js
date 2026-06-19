@@ -529,29 +529,64 @@ function formatPercent(value) {
   return value == null ? '-' : `${value.toFixed(1)}%`
 }
 
+/** Pick evenly-spaced indices (including first and last) for X-axis labels. */
+function pickTickIndices(length, maxTicks = 6) {
+  if (length <= maxTicks) return Array.from({ length }, (_, i) => i)
+  const step = (length - 1) / (maxTicks - 1)
+  const indices = new Set()
+  for (let i = 0; i < maxTicks; i++) indices.add(Math.round(i * step))
+  return Array.from(indices).sort((a, b) => a - b)
+}
+
+/** Format a "YYYY-MM-DD" trend bucket date as a short axis label, e.g. "Jun 15". */
+function formatChartDate(dateStr) {
+  if (!dateStr || dateStr === 'unknown') return dateStr || '—'
+  const d = new Date(`${dateStr}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return dateStr
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
 function durationChart(trends) {
   if (!trends.length) return `<div class="jobs-placeholder">No metric data in this window</div>`
   const width = 720
   const height = 220
-  const pad = 26
+  const padLeft = 50
+  const padRight = 20
+  const padTop = 16
+  const padBottom = 34
   const max = Math.max(...trends.map(row => row.duration?.max ?? 0), 1)
   const x = index => trends.length === 1
-    ? width / 2
-    : pad + (index * (width - pad * 2)) / (trends.length - 1)
-  const y = value => height - pad - ((value ?? 0) / max) * (height - pad * 2)
+    ? (padLeft + (width - padRight)) / 2
+    : padLeft + (index * (width - padLeft - padRight)) / (trends.length - 1)
+  const y = value => height - padBottom - ((value ?? 0) / max) * (height - padTop - padBottom)
 
   const points = trends.map((row, index) => `${x(index)},${y(row.duration?.avg)}`).join(' ')
   const ranges = trends.map((row, index) => `
     <line x1="${x(index)}" y1="${y(row.duration?.min)}" x2="${x(index)}" y2="${y(row.duration?.max)}" class="chart-range"/>
-    <circle cx="${x(index)}" cy="${y(row.duration?.avg)}" r="3" class="chart-point" data-toggle="tooltip" 
-      data-date="${esc(row.date)}" data-avg="${formatDuration(row.duration?.avg)}" 
+    <circle cx="${x(index)}" cy="${y(row.duration?.avg)}" r="3" class="chart-point" data-toggle="tooltip"
+      data-date="${esc(row.date)}" data-avg="${formatDuration(row.duration?.avg)}"
       data-min="${formatDuration(row.duration?.min)}" data-max="${formatDuration(row.duration?.max)}">
       <title>${esc(row.date)} avg ${esc(formatDuration(row.duration?.avg))} (min: ${esc(formatDuration(row.duration?.min))}, max: ${esc(formatDuration(row.duration?.max))})</title>
     </circle>`).join('')
 
+  const yTickCount = 4
+  const yTicks = Array.from({ length: yTickCount + 1 }, (_, i) => {
+    const value = (max / yTickCount) * i
+    const yPos = y(value)
+    return `
+      <line x1="${padLeft - 4}" y1="${yPos}" x2="${padLeft}" y2="${yPos}" class="chart-axis"/>
+      <text x="${padLeft - 8}" y="${yPos}" class="chart-axis-label" text-anchor="end" dominant-baseline="middle">${esc(formatDuration(value))}</text>`
+  }).join('')
+
+  const xTicks = pickTickIndices(trends.length).map(index => `
+    <text x="${x(index)}" y="${height - padBottom + 16}" class="chart-axis-label" text-anchor="middle">${esc(formatChartDate(trends[index].date))}</text>`).join('')
+
   return `
     <svg class="trend-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Job duration trend">
-      <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" class="chart-axis"/>
+      <line x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${height - padBottom}" class="chart-axis"/>
+      <line x1="${padLeft}" y1="${height - padBottom}" x2="${width - padRight}" y2="${height - padBottom}" class="chart-axis"/>
+      ${yTicks}
+      ${xTicks}
       <polyline points="${points}" class="chart-line"/>
       ${ranges}
     </svg>`
@@ -561,32 +596,51 @@ function statusChart(trends) {
   if (!trends.length) return `<div class="jobs-placeholder">No status data in this window</div>`
   const width = 720
   const height = 220
-  const pad = 26
+  const padLeft = 50
+  const padRight = 20
+  const padTop = 16
+  const padBottom = 34
   const gap = 5
-  const barWidth = Math.max(8, ((width - pad * 2) / trends.length) - gap)
+  const barWidth = Math.max(8, ((width - padLeft - padRight) / trends.length) - gap)
   const max = Math.max(...trends.map(row => (row.success ?? 0) + (row.failed ?? 0)), 1)
 
   const bars = trends.map((row, index) => {
-    const barX = pad + index * (barWidth + gap)
-    const successHeight = ((row.success ?? 0) / max) * (height - pad * 2)
-    const failedHeight = ((row.failed ?? 0) / max) * (height - pad * 2)
-    const failedY = height - pad - failedHeight
+    const barX = padLeft + index * (barWidth + gap)
+    const successHeight = ((row.success ?? 0) / max) * (height - padTop - padBottom)
+    const failedHeight = ((row.failed ?? 0) / max) * (height - padTop - padBottom)
+    const failedY = height - padBottom - failedHeight
     const successY = failedY - successHeight
     const successCount = row.success ?? 0
     const failedCount = row.failed ?? 0
     const totalCount = successCount + failedCount
     return `
       <g class="chart-bar-group" data-toggle="tooltip" data-date="${esc(row.date)}" data-passed="${successCount}" data-failed="${failedCount}" data-total="${totalCount}">
+        <title>${esc(row.date)} ${successCount} passed / ${failedCount} failed (${totalCount} total)</title>
         <rect x="${barX}" y="${successY}" width="${barWidth}" height="${successHeight}" class="chart-bar-success"/>
-        <rect x="${barX}" y="${failedY}" width="${barWidth}" height="${failedHeight}" class="chart-bar-failed">
-          <title>${esc(row.date)} ${successCount} passed / ${failedCount} failed (${totalCount} total)</title>
-        </rect>
+        <rect x="${barX}" y="${failedY}" width="${barWidth}" height="${failedHeight}" class="chart-bar-failed"/>
       </g>`
+  }).join('')
+
+  const yTickCount = 4
+  const yTicks = Array.from({ length: yTickCount + 1 }, (_, i) => {
+    const value = Math.round((max / yTickCount) * i)
+    const yPos = height - padBottom - (value / max) * (height - padTop - padBottom)
+    return `
+      <line x1="${padLeft - 4}" y1="${yPos}" x2="${padLeft}" y2="${yPos}" class="chart-axis"/>
+      <text x="${padLeft - 8}" y="${yPos}" class="chart-axis-label" text-anchor="end" dominant-baseline="middle">${value}</text>`
+  }).join('')
+
+  const xTicks = pickTickIndices(trends.length).map(index => {
+    const barX = padLeft + index * (barWidth + gap) + barWidth / 2
+    return `<text x="${barX}" y="${height - padBottom + 16}" class="chart-axis-label" text-anchor="middle">${esc(formatChartDate(trends[index].date))}</text>`
   }).join('')
 
   return `
     <svg class="trend-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Job status trend">
-      <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" class="chart-axis"/>
+      <line x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${height - padBottom}" class="chart-axis"/>
+      <line x1="${padLeft}" y1="${height - padBottom}" x2="${width - padRight}" y2="${height - padBottom}" class="chart-axis"/>
+      ${yTicks}
+      ${xTicks}
       ${bars}
     </svg>`
 }

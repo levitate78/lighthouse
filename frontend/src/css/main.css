@@ -793,6 +793,12 @@ ul   { list-style: none; }
   stroke-width: 1;
 }
 
+.chart-axis-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  fill: var(--text-muted);
+}
+
 .chart-line {
   fill: none;
   stroke: var(--accent);
